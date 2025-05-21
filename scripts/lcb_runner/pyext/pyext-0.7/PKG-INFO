@@ -1,0 +1,73 @@
+Metadata-Version: 1.1
+Name: pyext
+Version: 0.7
+Summary: Simple Python extensions.
+Home-page: UNKNOWN
+Author: Ryan Gonzalez
+Author-email: kirbyfan64sos@gmail.com
+License: UNKNOWN
+Description: PyExt
+        =====
+        
+        .. image:: https://travis-ci.org/kirbyfan64/PyExt.png
+            :target: https://travis-ci.org/kirbyfan64/PyExt
+        
+        Several simple extensions that add some nifty features to Python.
+        
+        Links:
+        ******
+        
+        ========= =============================================
+        GitHub    https://github.com/kirbyfan64/PyExt
+        PyPI      https://pypi.python.org/pypi/pyext
+        Newsgroup https://groups.google.com/forum/#!forum/pyext
+        ========= =============================================
+        
+        Features:
+        *********
+        
+        - Function overloading
+        - Switch statement
+        - Runtime module creation
+        - Tail recursion removal
+        - Python 2 function annotations
+        - Python 2 safe tuple unpacking
+        - Assignment if condition is true
+        
+        Examples:
+        *********
+        
+        Function overloading::
+           
+           @overload.argc(1)
+           def f(a): print 'Function 1 called'
+           @overload.argc(2)
+           def f(a, b): print 'Function 2 called'
+           
+           f(1)
+           f(1, 2)
+        
+        Switch statement::
+           
+           with switch(1):
+               if case(0): print 'Awkward...'; case.quit() # case.quit() is the same as break
+               if case(2): print '???'
+               if case(1): print 'Phew! It works!'
+               if case.default(): print 'Ummmm...'
+        
+        Function annotations::
+           
+           @fannotate('Return annotation', a=1, b=2)
+           def x(a, b):
+               return 0
+        
+        Assign if condition is true::
+           
+           compare_and_swap('my_var', None, 2) # set my_var to 2 if it equals None
+        
+        .. note:: Please ignore this project's messy commit history(several commits under invalid_email_address, about 20 commits labeled Initial). I was trying to use hg-git and kept goofing stuff up.
+        
+Platform: UNKNOWN
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 3

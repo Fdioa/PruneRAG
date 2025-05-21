@@ -1,0 +1,9 @@
+README.rst
+pyext.py
+setup.cfg
+setup.py
+pyext.egg-info/PKG-INFO
+pyext.egg-info/SOURCES.txt
+pyext.egg-info/dependency_links.txt
+pyext.egg-info/top_level.txt
+test/test_pyext.py
