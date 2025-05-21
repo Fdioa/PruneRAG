@@ -1,0 +1,33 @@
+{
+    "base_path": "/workspace/Search-o1/data",
+    "datasets": {
+        "gpqa": {
+            "path": "GPQA/{split}.json"
+        },
+        "livecode": {
+            "path": "LiveCodeBench/{split}.json"
+        },
+        "nq": {
+            "path": "QA_Datasets/{dataset_name}.json"
+        },
+        "2wiki": {
+            "path": "QA_Datasets/{dataset_name}.json"   
+        },
+        "triviaqa": {
+            "path": "QA_Datasets/{dataset_name}.json"
+        },
+        "hotpotqa": {
+            "path": "QA_Datasets/{dataset_name}.json"
+        },
+        "bamboogle": {
+            "path": "QA_Datasets/{dataset_name}.json"
+        },
+        "musique": {
+            "path": "QA_Datasets/{dataset_name}.json"
+        },
+        "example": {
+            "path": "QA_Datasets/{dataset_name}.json"
+        }
+
+    }
+}
