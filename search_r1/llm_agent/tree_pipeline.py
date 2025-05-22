@@ -10,6 +10,7 @@ import os,sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.data_loader import DatasetLoader
 from scripts.evaluater import EvaluationStrategyFactory
+from scripts.seed import setup_seed
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +57,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        '--retrieval_url',
-        type=str,
-    )
-
-    parser.add_argument(
-        'output_dir',
+        '--output_dir',
         type=str,
         default="./output",
         help="输出目录"
@@ -359,7 +355,8 @@ class Generator:
 
 if __name__ == "__main__":
 
-
+    setup_seed(3407)
+    args = parse_args()
     config = Config(
         model_path=args.model_path,
         data_path=args.data_path,
