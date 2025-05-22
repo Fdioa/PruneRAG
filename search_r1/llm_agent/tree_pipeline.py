@@ -91,7 +91,6 @@ def parse_args():
         help="查询树最大深度"
     )
 
-
     return parser.parse_args()
 
 class Config:
