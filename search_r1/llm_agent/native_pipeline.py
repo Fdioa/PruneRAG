@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Any
 from vllm import LLM, SamplingParams
 import torch
-import json ,re
+import json ,re, argparse
 from datetime import datetime
 import os,sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -10,6 +10,53 @@ from scripts.data_loader import DatasetLoader
 from scripts.evaluater import EvaluationStrategyFactory
 
 logger = logging.getLogger(__name__)
+
+def parse_args():
+
+    parser = argparse.ArgumentParser(description="原始模型生成")
+
+    parser.add_argument(
+        '--model_path',
+        type=str,
+        required=True,
+        help="模型路径"
+    )
+
+    parser.add_argument(
+        '--data_path',
+        type=str,
+        default="/workspace/Search-R1/config/dataset_paths.json",
+        help="数据集路径"
+    )
+
+    # Dataset and split configuration
+    parser.add_argument(
+        '--dataset_name',
+        type=str,
+        required=True,
+        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle'],
+        help="数据集名称"
+    )
+
+    parser.add_argument(
+        '--split',
+        type=str,
+        required=True,
+        choices=['test', 'diamond', 'main', 'extended'],
+        help="数据集划分"
+    )
+
+    parser.add_argument(
+        'output_dir',
+        type=str,
+        default="./output",
+        help="输出目录"
+    )
+
+
+    return parser.parse_args()
+
+
 
 class Config:
     def __init__(self, 
@@ -40,7 +87,8 @@ class Generator:
 
 
         self.prompt_template = (
-            "answer the following query:\n"
+            "Answer the following query:\n"
+            "You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.\n"
             "Question: {question}\n\n"
             "Answer:"
         )
@@ -81,7 +129,7 @@ class Generator:
         strategy.prepare_samples(data, prompts, output_list)
 
         # 保存评估结果
-        strategy.save_results(self.config.output_dir, self.config.split,total_time, apply_backoff=False)
+        strategy.save_results(self.config.output_dir,"native", self.config.split,total_time, apply_backoff=False)
         
         return [output.outputs[0].text for output in outputs]
 
@@ -89,13 +137,15 @@ class Generator:
 if __name__ == "__main__":
 
 
+    args = parse_args()
+
     # 测试用例
     config = Config(
-        model_path="/workspace/Search-o1/models/qwq_awq",
-        dataset_name="2wiki",
-        split="test",
-        output_dir="./outputs",
-        log_dir="./logs"
+        model_path=args.model_path,
+        data_path=args.data_path,
+        dataset_name=args.dataset_name,
+        split=args.split,
+        output_dir=args.output_dir
     )
     generator = Generator(config)
 

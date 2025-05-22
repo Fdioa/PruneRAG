@@ -13,10 +13,96 @@ from scripts.evaluater import EvaluationStrategyFactory
 
 logger = logging.getLogger(__name__)
 
+def parse_args():
+
+    parser = argparse.ArgumentParser(description="原始模型生成")
+
+    parser.add_argument(
+        '--model_path',
+        type=str,
+        required=True,
+        help="模型路径"
+    )
+
+    parser.add_argument(
+        '--retrieval_url',
+        type=str,
+        default="http://localhost:8000",
+        help="检索服务URL"
+    )
+
+    parser.add_argument(
+        '--data_path',
+        type=str,
+        default="/workspace/Search-R1/config/dataset_paths.json",
+        help="数据集路径"
+    )
+
+    # Dataset and split configuration
+    parser.add_argument(
+        '--dataset_name',
+        type=str,
+        required=True,
+        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle'],
+        help="数据集名称"
+    )
+
+    parser.add_argument(
+        '--split',
+        type=str,
+        required=True,
+        choices=['test', 'diamond', 'main', 'extended'],
+        help="数据集划分"
+    )
+
+    parser.add_argument(
+        '--retrieval_url',
+        type=str,
+    )
+
+    parser.add_argument(
+        'output_dir',
+        type=str,
+        default="./output",
+        help="输出目录"
+    )
+
+    parser.add_argument(
+        '--log_dir',
+        type=str,
+        default="./logs/query_trees.jsonl",
+        help="查询树日志路径"
+    )
+
+    parser.add_argument(
+        '--topk',
+        type=int,
+        default=3,
+        help="检索的文档数量"
+    )
+
+    parser.add_argument(
+        '--max_context_length',
+        type=int,
+        default=4096,
+        help="上下文最大长度"
+    )
+
+    parser.add_argument(
+        '--max_depth',
+        type=int,
+        default=3,
+        help="查询树最大深度"
+    )
+
+
+    return parser.parse_args()
+
 class Config:
     def __init__(self, 
                  model_path: str = "/workspace/Search-R1/models",
                  retrieval_url: str = "http://localhost:8000",
+                 data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
                  dataset_name: str = "2wiki",
                  split: str = "test",
                  topk: int = 3,
@@ -25,6 +111,7 @@ class Config:
                  output_dir: str = "./outputs",
                  log_dir: str = "./logs"):
         self.model_path = model_path
+        self.data_path = data_path
         self.retrieval_url = retrieval_url
         self.dataset_name = dataset_name
         self.split = split
@@ -55,7 +142,7 @@ class Generator:
             # max_model_len = 70000
             )
         self.retrieval_client = RetrievalClient(base_url=config.retrieval_url)
-        self.dataset_loader = DatasetLoader()
+        self.dataset_loader = DatasetLoader(self.config.data_path)
 
 
         self.prompt_template = (
@@ -227,7 +314,7 @@ class Generator:
         strategy.prepare_samples(data, prompts, output_list)
 
         # 保存评估结果
-        strategy.save_results(self.config.output_dir, self.config.split,total_time, apply_backoff=False)
+        strategy.save_results(self.config.output_dir,"tree", self.config.split,total_time, apply_backoff=False)
         
         return [output.outputs[0].text for output in outputs]
 
@@ -273,18 +360,19 @@ class Generator:
 if __name__ == "__main__":
 
 
-    # 测试用例
     config = Config(
-        model_path="/workspace/Search-o1/models/qwq_awq",
-        retrieval_url="http://localhost:8000",
-        dataset_name="2wiki",
-        split="test",
-        topk=3,
-        max_context_length=4096,
-        max_depth=3,
-        output_dir="./outputs",
-        log_dir="./logs"
-    )
+        model_path=args.model_path,
+        data_path=args.data_path,
+        retrieval_url=args.retrieval_url,
+        dataset_name=args.dataset_name,
+        split=args.split,
+        topk=args.topk,
+        max_depth=args.max_depth,
+        max_context_length=args.max_context_length,
+        output_dir=args.output_dir,
+        log_dir=args.log_dir)
+
+
     generator = Generator(config)
 
     answers = generator.generate()

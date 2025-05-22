@@ -291,10 +291,10 @@ class GeneralEvaluationStrategy(BaseEvaluationStrategy):
         
         return {'overall': overall, 'per_domain': domain_metrics}
     
-    def save_results(self, output_dir, split, total_time, apply_backoff=False):
+    def save_results(self, output_dir,method, split, total_time, apply_backoff=False):
         t = time.localtime()
-        result_name = f"{split}.{t.tm_mon}.{t.tm_mday},{t.tm_hour}:{t.tm_min}.json"
-        metrics_name = f'{split}.{t.tm_mon}.{t.tm_mday},{t.tm_hour}:{t.tm_min}.metrics.json'
+        result_name = f"{method}.{split}.{t.tm_mon}.{t.tm_mday},{t.tm_hour}:{t.tm_min}.json"
+        metrics_name = f'{method}.{split}.{t.tm_mon}.{t.tm_mday},{t.tm_hour}:{t.tm_min}.metrics.json'
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)

@@ -4,7 +4,7 @@ from vllm import LLM, SamplingParams
 from search_r1.search.retrieval_client import RetrievalClient, QueryRequest
 import torch
 import concurrent.futures
-import json ,re
+import json ,re, argparse
 from datetime import datetime
 import os,sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -12,6 +12,87 @@ from scripts.data_loader import DatasetLoader
 from scripts.evaluater import EvaluationStrategyFactory
 
 logger = logging.getLogger(__name__)
+
+
+def parse_args():
+
+    parser = argparse.ArgumentParser(description="原始模型生成")
+
+    parser.add_argument(
+        '--model_path',
+        type=str,
+        required=True,
+        help="模型路径"
+    )
+
+    parser.add_argument(
+        '--retrieval_url',
+        type=str,
+        default="http://localhost:8000",
+        help="检索服务URL"
+    )
+
+    parser.add_argument(
+        '--data_path',
+        type=str,
+        default="/workspace/Search-R1/config/dataset_paths.json",
+        help="数据集路径"
+    )
+
+    # Dataset and split configuration
+    parser.add_argument(
+        '--dataset_name',
+        type=str,
+        required=True,
+        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle'],
+        help="数据集名称"
+    )
+
+    parser.add_argument(
+        '--split',
+        type=str,
+        required=True,
+        choices=['test', 'diamond', 'main', 'extended'],
+        help="数据集划分"
+    )
+
+    parser.add_argument(
+        '--retrieval_url',
+        type=str,
+    )
+
+    parser.add_argument(
+        'output_dir',
+        type=str,
+        default="./output",
+        help="输出目录"
+    )
+
+    parser.add_argument(
+        '--log_dir',
+        type=str,
+        default="./logs/query_trees.jsonl",
+        help="查询树日志路径"
+    )
+
+    parser.add_argument(
+        '--topk',
+        type=int,
+        default=3,
+        help="检索的文档数量"
+    )
+
+    parser.add_argument(
+        '--max_context_length',
+        type=int,
+        default=4096,
+        help="上下文最大长度"
+    )
+
+
+    return parser.parse_args()
+
+
 
 class Config:
     def __init__(self, 
@@ -22,7 +103,7 @@ class Config:
                  split: str = "test",
                  topk: int = 10,
                  max_context_length: int = 4096,
-                 output_dir: str = "./outputs",
+                 output_dir: str = "./output",
                  log_dir: str = "./logs"):
         self.model_path = model_path
         self.data_path = data_path
@@ -150,7 +231,7 @@ class Generator:
             
             # 保存到JSONL文件
             try:
-                log_path= "logs/query_trees.jsonl"
+                log_path= self.config.log_dir + f"/{self.config.dataset_name}_{self.config.split}_query_tree.jsonl"
                 os.makedirs(os.path.dirname(log_path), exist_ok=True)
                 with open(log_path, "a") as f:
                     for node in self._serialize_tree(root):
@@ -170,25 +251,46 @@ class Generator:
         strategy.prepare_samples(data, prompts, output_list)
 
         # 保存评估结果
-        strategy.save_results(self.config.output_dir, self.config.split,total_time, apply_backoff=False)
+        strategy.save_results(self.config.output_dir,"rag", self.config.split,total_time, apply_backoff=False)
         
         return [output.outputs[0].text for output in outputs]
+    
+    def _serialize_tree(self, root_node: ContextTreeNode) -> list:
+        """非递归广度优先序列化所有节点"""
+        from collections import deque
+        nodes_list = []
+        queue = deque([root_node])
+        
+        while queue:
+            current = queue.popleft()
+            node_data = {
+                "timestamp": datetime.now().isoformat(),
+                "query": current.query,
+                "depth": current.depth,
+                "subqueries": current.subqueries,
+                "context": current.context,
+                "parent_query": current.parent.query if current.parent else None
+            }
+            nodes_list.append(node_data)
+            queue.extend(current.children)
+        return nodes_list
 
 if __name__ == "__main__":
 
-
+    args = parse_args()
     # 测试用例
     config = Config(
-        model_path="/workspace/Search-o1/models/qwq_awq",
-        retrieval_url="http://localhost:8000",
-        dataset_name="2wiki",
-        split="test",
-        topk=3,
-        max_context_length=4096,
-        max_depth=3,
-        output_dir="./outputs",
-        log_dir="./logs"
-    )
+        model_path=args.model_path,
+        data_path=args.data_path,
+        retrieval_url=args.retrieval_url,
+        dataset_name=args.dataset_name,
+        split=args.split,
+        topk=args.topk,
+        max_context_length=args.max_context_length,
+        output_dir=args.output_dir,
+        log_dir=args.log_dir)
+
+
     generator = Generator(config)
 
     answers = generator.generate()
