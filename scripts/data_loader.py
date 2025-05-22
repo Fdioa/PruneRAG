@@ -13,7 +13,7 @@ class DatasetLoader:
         dataset_config (Dict): 数据集路径配置字典
     """
     
-    def __init__(self, config_path: str = '/workspace/Search-R1/configs/dataset_paths.json'):
+    def __init__(self, config_path: str = './config/dataset_paths.json'):
         """
         初始化加载器并加载配置文件
         
@@ -109,7 +109,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # 初始化加载器
-    loader = DatasetLoader()
+    loader = DatasetLoader("./config/dataset_paths.json")
     
     try:
         print(f"正在加载{args.dataset.upper()}数据集（{args.split}划分）...")
