@@ -44,7 +44,7 @@ def parse_args():
         '--dataset_name',
         type=str,
         required=True,
-        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle'],
+        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle','example'],
         help="数据集名称"
     )
 
@@ -141,10 +141,10 @@ class Generator:
 
 
         self.prompt_template = (
-            "Context: {context}\n\n"
-            "Based on the above context, answer the following query:\n"
-            "Query: {query}\n\n"
-            "Answer:"
+            "Based on the documents,answer the following question:\n"
+            "You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.\n"
+            "Documents: {context}\n\n"
+            "Question: {question}\n\n"
         )
         self.subquery_prompt = (
             "Please decompose the following query into two logically related sub-queries that can mutually verify each other:\n"
@@ -263,7 +263,7 @@ class Generator:
         
         # 批量生成最终答案
         combined_contexts = self._merge_tree_context(root_nodes)
-        prompts = [self.prompt_template.format(context=ctx, query=root.query) 
+        prompts = [self.prompt_template.format(context=ctx, question=root.query) 
                   for ctx, root in zip(combined_contexts, root_nodes)]
         
         params = SamplingParams(

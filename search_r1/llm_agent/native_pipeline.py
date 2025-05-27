@@ -88,7 +88,7 @@ class Generator:
 
 
         self.prompt_template = (
-            "Answer the following query:\n"
+            "Answer the following question:\n"
             "You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.\n"
             "Question: {question}\n\n"
             "Answer:"

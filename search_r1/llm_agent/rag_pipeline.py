@@ -45,7 +45,7 @@ def parse_args():
         '--dataset_name',
         type=str,
         required=True,
-        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle'],
+        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle','example'],
         help="数据集名称"
     )
 
@@ -137,10 +137,10 @@ class Generator:
 
 
         self.prompt_template = (
-            "Context: {context}\n\n"
-            "Based on the above context, answer the following query:\n"
-            "Query: {query}\n\n"
-            "Answer:"
+            "Based on the documents,answer the following question:\n"
+            "You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.\n"
+            "Documents: {context}\n\n"
+            "Question: {question}\n\n"
         )
 
         self.root_node = ContextTreeNode("ROOT")
@@ -199,7 +199,7 @@ class Generator:
        
         # 批量生成最终答案
 
-        prompts = [self.prompt_template.format(context=node.context, query=node.query) 
+        prompts = [self.prompt_template.format(context=node.context, question=node.query) 
                   for node in root_nodes]
         
         params = SamplingParams(
