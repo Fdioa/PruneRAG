@@ -1,5 +1,6 @@
 import logging
 from typing import List, Dict, Any
+from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 from search_r1.search.retrieval_client import RetrievalClient, QueryRequest
 import torch
@@ -91,6 +92,39 @@ def parse_args():
         help="查询树最大深度"
     )
 
+    parser.add_argument(
+        '--max_tokens',
+        type=int,
+        default=10240,
+        help="生成的最大token数"
+    )
+    parser.add_argument(
+        '--temperature',
+        type=float,
+        default=0.7,
+        help="采样温度"
+    )
+    
+    parser.add_argument(
+        '--top_k',
+        type=int,
+        default=20,
+        help="Top-k采样参数"
+    )
+
+    parser.add_argument(
+        '--top_p',
+        type=float,
+        default=0.8,
+        help="Top-p采样参数"
+    )
+    parser.add_argument(
+        '--repetition_penalty',
+        type=float,
+        default=1.05,
+        help="重复惩罚系数"
+    )
+
     return parser.parse_args()
 
 class Config:
@@ -103,6 +137,11 @@ class Config:
                  topk: int = 3,
                  max_context_length: int = 4096,
                  max_depth: int = 3,
+                 max_tokens: int = 10240,
+                 temperature: float = 0.7,
+                 top_k: int = 20,
+                 top_p: float = 0.8,
+                 repetition_penalty: float = 1.05,
                  output_dir: str = "./outputs",
                  log_dir: str = "./logs"):
         self.model_path = model_path
@@ -113,6 +152,11 @@ class Config:
         self.topk = topk
         self.max_context_length = max_context_length
         self.max_depth = max_depth
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+        self.top_k = top_k
+        self.top_p = top_p
+        self.repetition_penalty = repetition_penalty
         self.output_dir = output_dir
         self.log_dir = log_dir
         
@@ -136,6 +180,15 @@ class Generator:
             gpu_memory_utilization=0.90,
             # max_model_len = 70000
             )
+
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            config.model_path,
+            padding_side="left",
+            trust_remote_code=True
+        )
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        
         self.retrieval_client = RetrievalClient(base_url=config.retrieval_url)
         self.dataset_loader = DatasetLoader(self.config.data_path)
 
@@ -157,14 +210,16 @@ class Generator:
 
     def _generate_subqueries(self, queries: List[str]) -> List[List[str]]:
         prompts = [self.subquery_prompt.format(query=query) for query in queries]
+        prompts = [{"role": "user", "content": up} for up in prompts]
+        prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True) for p in prompts]
 
         params = SamplingParams(
-                max_tokens=20480,
-                temperature=0.7,
-                top_p=0.8,
-                top_k=20,
-                repetition_penalty=1.05,
-            )
+            max_tokens=self.config.max_tokens,
+            temperature=self.config.temperature,
+            top_p=self.config.top_p,
+            top_k=self.config.top_k,
+            repetition_penalty=self.config.repetition_penalty,
+        )
         outputs = self.llm.generate(prompts, params)
         result = []
         for output in outputs:
@@ -265,14 +320,17 @@ class Generator:
         combined_contexts = self._merge_tree_context(root_nodes)
         prompts = [self.prompt_template.format(context=ctx, question=root.query) 
                   for ctx, root in zip(combined_contexts, root_nodes)]
+        prompts = [{"role": "user", "content": up} for up in prompts]
+        prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True) for p in prompts]
         
         params = SamplingParams(
-            max_tokens=20480,
-            temperature=0.7,
-            top_p=0.8,
-            top_k=20,
-            repetition_penalty=1.05,
+            max_tokens=self.config.max_tokens,
+            temperature=self.config.temperature,
+            top_p=self.config.top_p,
+            top_k=self.config.top_k,
+            repetition_penalty=self.config.repetition_penalty,
         )
+
         outputs = self.llm.generate(prompts, params)
 
         output_list = []
@@ -365,6 +423,11 @@ if __name__ == "__main__":
         topk=args.topk,
         max_depth=args.max_depth,
         max_context_length=args.max_context_length,
+        max_tokens=args.max_tokens,
+        temperature=args.temperature,
+        top_k=args.top_k,
+        top_p=args.top_p,
+        repetition_penalty=args.repetition_penalty,
         output_dir=args.output_dir,
         log_dir=args.log_dir)
 
