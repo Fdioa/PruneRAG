@@ -6,13 +6,13 @@ from transformers.pipelines.automatic_speech_recognition import rescale_stride
 from vllm import LLM, SamplingParams
 
 import torch
-import json ,re
+import json ,re, argparse
 from datetime import datetime
 import os,sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.data_loader import DatasetLoader
-from scripts.evaluater import EvaluationStrategyFactory
+from scripts.evaluater import EvaluationStrategyFactory,EvaluationUtils
 from scripts.seed import setup_seed
 from search_r1.search.retrieval_client import RetrievalClient, QueryRequest
 
@@ -116,6 +116,51 @@ def parse_args():
         help="查询树最大深度"
     )
 
+    parser.add_argument(
+        '--max_search_limit',
+        type=int,
+        default=3,
+        help="每个查询的最大检索次数"
+    )
+    parser.add_argument(
+        '--max_turn',
+        type=int,
+        default=15,
+        help="最大轮次"
+    )
+    parser.add_argument(
+        '--max_tokens',
+        type=int,
+        default=10240,
+        help="生成的最大token数"
+    )
+    parser.add_argument(
+        '--temperature',
+        type=float,
+        default=0.7,
+        help="采样温度"
+    )
+    
+    parser.add_argument(
+        '--top_k',
+        type=int,
+        default=20,
+        help="Top-k采样参数"
+    )
+
+    parser.add_argument(
+        '--top_p',
+        type=float,
+        default=0.8,
+        help="Top-p采样参数"
+    )
+    parser.add_argument(
+        '--repetition_penalty',
+        type=float,
+        default=1.05,
+        help="重复惩罚系数"
+    )
+
     return parser.parse_args()
 
 class Config:
@@ -137,21 +182,35 @@ class Config:
                  repetition_penalty: float = 1.05,
                  output_dir: str = "./outputs",
                  log_dir: str = "./logs"):
+        
+        ##模型和数据的路径
         self.model_path = model_path
         self.data_path = data_path
+
+        ##检索服务的地址
         self.retrieval_url = retrieval_url
+
+        ##数据集和划分
         self.dataset_name = dataset_name
         self.split = split
+
+        ##检索文档的个数、最大上下文长度、检索树的最大深度
         self.topk = topk
         self.max_context_length = max_context_length
         self.max_depth = max_depth
+
+        ##最大检索次数和最大论数
         self.max_search_limit = max_search_limit
         self.max_turn = max_turn
+
+        ##模型的采样参数
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.top_p = top_p
         self.top_k = top_k
         self.repetition_penalty = repetition_penalty
+
+        ##输出和日志目录
         self.output_dir = output_dir
         self.log_dir = log_dir
         
@@ -267,10 +326,10 @@ class Generator:
         if dataset_name in ['nq', 'triviaqa', 'hotpotqa', 'musique', 'bamboogle', '2wiki', 'medmcqa', 'pubhealth']:
             MAX_SEARCH_LIMIT = 5
             if dataset_name in ['hotpotqa', 'musique', 'bamboogle', '2wiki']:
-                MAX_SEARCH_LIMIT = 10
-                MAX_TURN = 15
-            self.config.top_k = 10
-            self.config.max_doc_len = 3000
+                MAX_SEARCH_LIMIT = 5
+                MAX_TURN = 3
+            self.config.top_k = 3
+            self.config.max_doc_len = 4096
 
 
         return MAX_SEARCH_LIMIT, MAX_TURN
@@ -291,13 +350,81 @@ class Generator:
 
         # Function to extract text between two tags
     
-    def extract_between(text: str, start_tag: str, end_tag: str) -> Optional[str]:
+    def extract_between(self, text: str, start_tag: str, end_tag: str) -> Optional[str]:
         pattern = re.escape(start_tag) + r"(.*?)" + re.escape(end_tag)
         matches = re.findall(pattern, text, flags=re.DOTALL)
         if matches:
             return matches[-1].strip()
         return None
 
+    def replace_recent_steps(self, origin_str, replace_str):
+        """
+        Replaces specific steps in the original reasoning steps with new steps.
+        If a replacement step contains "DELETE THIS STEP", that step is removed.
+
+        Parameters:
+        - origin_str (str): The original reasoning steps.
+        - replace_str (str): The steps to replace or delete.
+
+        Returns:
+        - str: The updated reasoning steps after applying replacements.
+        """
+
+        def parse_steps(text):
+            """
+            Parses the reasoning steps from a given text.
+
+            Parameters:
+            - text (str): The text containing reasoning steps.
+
+            Returns:
+            - dict: A dictionary mapping step numbers to their content.
+            """
+            step_pattern = re.compile(r"Step\s+(\d+):\s*")
+            steps = {}
+            current_step_num = None
+            current_content = []
+
+            for line in text.splitlines():
+                step_match = step_pattern.match(line)
+                if step_match:
+                    # If there's an ongoing step, save its content
+                    if current_step_num is not None:
+                        steps[current_step_num] = "\n".join(current_content).strip()
+                    current_step_num = int(step_match.group(1))
+                    content = line[step_match.end():].strip()
+                    current_content = [content] if content else []
+                else:
+                    if current_step_num is not None:
+                        current_content.append(line)
+            
+            # Save the last step if any
+            if current_step_num is not None:
+                steps[current_step_num] = "\n".join(current_content).strip()
+            
+            return steps
+
+        # Parse the original and replacement steps
+        origin_steps = parse_steps(origin_str)
+        replace_steps = parse_steps(replace_str)
+
+        # Apply replacements
+        for step_num, content in replace_steps.items():
+            if "DELETE THIS STEP" in content:
+                # Remove the step if it exists
+                if step_num in origin_steps:
+                    del origin_steps[step_num]
+            else:
+                # Replace or add the step
+                origin_steps[step_num] = content
+
+        # Sort the steps by step number
+        sorted_steps = sorted(origin_steps.items())
+
+        # Reconstruct the reasoning steps as a single string
+        new_reasoning_steps = "\n\n".join([f"{content}" for num, content in sorted_steps])
+
+        return new_reasoning_steps
 
 
     def generate_webpage_to_reasonchain_batch(
@@ -331,7 +458,7 @@ class Generator:
         )
 
         raw_outputs = [out.outputs[0].text for out in output]
-        extracted_infos = [extract_answer(raw, mode='infogen') for raw in raw_outputs]
+        extracted_infos = [EvaluationUtils.extract_answer(raw, mode='infogen') for raw in raw_outputs]
 
         for i, (p, r, e) in enumerate(zip(prompts, raw_outputs, extracted_infos)):
             batch_output_records.append({
@@ -350,8 +477,10 @@ class Generator:
         data = self.dataset_loader.load_dataset(self.config.dataset_name, self.config.split)
         input_list, active_sequences = self.prepare_prompts(data,self.config.dataset_name, self.config.model_path, self.MAX_SEARCH_LIMIT, subset_num=-1)
 
-        
+
         batch_output_records = []
+        turn = 0
+
         while True:
         # Identify sequences that need generation
             sequences_needing_generation = [seq for seq in active_sequences if not seq['finished']]
@@ -360,7 +489,7 @@ class Generator:
                 turn += 1
                 print(f'\n-------------- Turn {turn} --------------')
                 print(f"We have {len(sequences_needing_generation)} sequences needing generation...")
-                outputs = self.run_generation(sequences_needing_generation, self.config.max_tokens)
+                outputs = self.run_generation(sequences_needing_generation)
                 print("Generation completed, processing outputs...")
 
                 # Initialize batch variables
@@ -371,10 +500,6 @@ class Generator:
                 batch_documents = []
                 batch_sequences = []
 
-                # Collect URLs to fetch across all sequences
-                all_urls_to_fetch = set()
-                url_snippets = {}
-                url_sequence_map = {}  # Map URL to list of sequences needing it
 
                 # Process each sequence and collect URLs
                 for seq, out in zip(sequences_needing_generation, outputs):
@@ -388,7 +513,7 @@ class Generator:
                     search_query = self.extract_between(text, BEGIN_SEARCH_QUERY, END_SEARCH_QUERY)
                     # If a search query is present and needs to be executed
                     if search_query and seq['output'].rstrip().endswith(END_SEARCH_QUERY):
-                        if seq['search_count'] < MAX_SEARCH_LIMIT and search_query not in seq['executed_search_queries']:
+                        if seq['search_count'] < self.MAX_SEARCH_LIMIT and search_query not in seq['executed_search_queries']:
                             # Execute search, use cache if available
 
                             try:
@@ -434,7 +559,7 @@ class Generator:
                             seq['search_count'] += 1
                             seq['executed_search_queries'].add(search_query)
 
-                        elif seq['search_count'] >= MAX_SEARCH_LIMIT:
+                        elif seq['search_count'] >= self.MAX_SEARCH_LIMIT:
                             limit_message = f"\n{BEGIN_SEARCH_RESULT}\nThe maximum search limit is exceeded. You are not allowed to search.\n{END_SEARCH_RESULT}\n"
                             seq['prompt'] += limit_message
                             seq['output'] += limit_message
@@ -472,7 +597,7 @@ class Generator:
                             seq['output'] += append_text
                             seq['history'].append(append_text)
                         else:
-                            append_text = replace_recent_steps(seq['output'], analysis)
+                            append_text = self.replace_recent_steps(seq['output'], analysis)
                             seq['prompt'] += append_text
                             seq['output'] += append_text
                             seq['history'].append(append_text)
@@ -506,4 +631,35 @@ class Generator:
     
 
 
+if __name__ == "__main__":
+
+
+    # 设置随机数种子
+    setup_seed(3407)
+    # 解析命令行参数
+    args = parse_args()
+    # 测试用例
+    config = Config(
+        model_path=args.model_path,
+        data_path=args.data_path,
+        retrieval_url=args.retrieval_url,
+        dataset_name=args.dataset_name,
+        split=args.split,
+        topk=args.topk,
+        max_depth=args.max_depth,
+        max_search_limit=args.max_search_limit,
+        max_turn=args.max_turn,
+        max_tokens=args.max_tokens,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        top_k=args.top_k,
+        repetition_penalty=args.repetition_penalty,
+        max_context_length=args.max_context_length,
+        output_dir=args.output_dir,
+        log_dir=args.log_dir)
+
+
+    generator = Generator(config)
+
+    answers = generator.generate()
 
