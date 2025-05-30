@@ -5,7 +5,7 @@ from vllm import LLM, SamplingParams
 from search_r1.search.retrieval_client import RetrievalClient, QueryRequest
 import torch
 import concurrent.futures
-import json ,re
+import json ,re,argparse
 from datetime import datetime
 import os,sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -349,7 +349,7 @@ class Generator:
             
             # 保存到JSONL文件
             try:
-                log_path= "logs/query_trees.jsonl"
+                log_path= self.config.log_dir + f"/{self.start_time}_tree_query_tree.jsonl"
                 os.makedirs(os.path.dirname(log_path), exist_ok=True)
                 with open(log_path, "a") as f:
                     for node in self._serialize_tree(root):

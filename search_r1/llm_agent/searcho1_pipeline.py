@@ -449,11 +449,11 @@ class Generator:
         output = self.llm.generate(
             prompts,
             sampling_params=SamplingParams(
-                max_tokens=max_tokens,
-                temperature=0.7,
-                top_p=0.8,
-                top_k=20,
-                repetition_penalty=1.05,
+            max_tokens=self.config.max_tokens,
+            temperature=self.config.temperature,
+            top_p=self.config.top_p,
+            top_k=self.config.top_k,
+            repetition_penalty=self.config.repetition_penalty,
             )
         )
 

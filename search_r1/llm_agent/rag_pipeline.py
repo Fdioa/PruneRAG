@@ -285,7 +285,7 @@ class Generator:
             
             # 保存到JSONL文件
             try:
-                log_path= self.config.log_dir + f"/{self.config.dataset_name}_{self.config.split}_query_tree.jsonl"
+                log_path= self.config.log_dir + f"/{self.start_time}_rag_query_tree.jsonl"
                 os.makedirs(os.path.dirname(log_path), exist_ok=True)
                 with open(log_path, "a") as f:
                     for node in self._serialize_tree(root):
