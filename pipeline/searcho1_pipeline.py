@@ -14,7 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.data_loader import DatasetLoader
 from scripts.evaluater import EvaluationStrategyFactory,EvaluationUtils
 from scripts.seed import setup_seed
-from search_r1.search.retrieval_client import RetrievalClient, QueryRequest
+from scripts.search.retrieval_client import RetrievalClient, QueryRequest
 
 from prompts import (
     get_gpqa_search_o1_instruction, 
