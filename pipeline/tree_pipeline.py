@@ -131,7 +131,7 @@ def parse_args():
 
 class Config:
     def __init__(self, 
-                 model_path: str = "/workspace/Search-R1/models",
+                 model_path: str = "/workspace/Search-R1/models/llama-3.1-8b-instruct",
                  retrieval_url: str = "http://localhost:8000",
                  data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
                  dataset_name: str = "2wiki",
@@ -147,6 +147,7 @@ class Config:
                  output_dir: str = "./outputs",
                  log_dir: str = "./logs"):
         self.model_path = model_path
+        self.model_name = os.path.basename(model_path)
         self.data_path = data_path
         self.retrieval_url = retrieval_url
         self.dataset_name = dataset_name
@@ -214,7 +215,7 @@ class Generator:
             "Please strictly follow the following Json format to return the results, no other redundant output: ```josn{{\"subquery1\": \"...\", \"subquery2\": \"...\"}}```"
             "Please do not output the thinking process and explanation, only output the JSON format result.\n"
         )
-        
+
         self.root_node = ContextTreeNode("ROOT")
         self.current_nodes = [self.root_node]
 
@@ -236,14 +237,16 @@ class Generator:
             subqueries_text = output.outputs[0].text.strip()
 
             pattern = r'\{.*?"subquery1".*?\}'
-
-            match = re.search(pattern, subqueries_text, re.DOTALL)
-            if match:
-                json_str = match.group(0)
+            matches = re.findall(pattern, subqueries_text, re.DOTALL)
+            if matches:
+                json_str = matches[-1]
                 
             try:
                 subqueries_json = json.loads(json_str)
-                result.append([subqueries_json['subquery1'].strip(), subqueries_json['subquery2'].strip()])
+                result.append([
+                    subqueries_json['subquery1'].strip(), 
+                    subqueries_json['subquery2'].strip()
+                ])
             except Exception as e:
                 logger.warning(f"子查询解析失败: {e}")
                 result.append([])
@@ -359,7 +362,7 @@ class Generator:
             
             # 保存到JSONL文件
             try:
-                log_path= self.config.log_dir + f"/{self.start_time}_tree_query_tree.jsonl"
+                log_path= self.config.log_dir +f"/{self.config.model_name}"+f"/{self.config.dataset_name}"+f"/{self.start_time}_tree_query_tree.jsonl"
                 os.makedirs(os.path.dirname(log_path), exist_ok=True)
                 with open(log_path, "a") as f:
                     for node in self._serialize_tree(root):
@@ -377,7 +380,8 @@ class Generator:
         strategy.prepare_samples(data, prompts, output_list)
 
         # 保存评估结果
-        strategy.save_results(self.config.output_dir,"tree", self.config.split,total_time, apply_backoff=False)
+        result_path = self.config.output_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"
+        strategy.save_results(result_path,"tree", self.config.split,total_time, apply_backoff=False)
         
         return [output.outputs[0].text for output in outputs]
 

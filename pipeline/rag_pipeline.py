@@ -129,7 +129,7 @@ def parse_args():
 
 class Config:
     def __init__(self, 
-                 model_path: str = "/workspace/Search-R1/models",
+                 model_path: str = "/workspace/Search-R1/models/llama-3.1-8b-instruct",
                  data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
                  retrieval_url: str = "http://localhost:8000",
                  dataset_name: str = "2wiki",
@@ -144,6 +144,7 @@ class Config:
                  output_dir: str = "./output",
                  log_dir: str = "./logs"):
         self.model_path = model_path
+        self.model_name = os.path.basename(model_path)
         self.data_path = data_path
         self.retrieval_url = retrieval_url
         self.dataset_name = dataset_name
@@ -193,8 +194,9 @@ class Generator:
 
 
         self.prompt_template = (
-            "Based on the documents,answer the following question:\n"
+            "Answer the following question:\n"
             "You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.\n"
+            "You can use the following documents to help you answer the question"
             "Documents: {context}\n\n"
             "Question: {question}\n\n"
         )
@@ -287,7 +289,7 @@ class Generator:
             
             # 保存到JSONL文件
             try:
-                log_path= self.config.log_dir + f"/{self.start_time}_rag_query_tree.jsonl"
+                log_path= self.config.log_dir +f"/{self.config.model_name}"+f"/{self.config.dataset_name}"+f"/{self.start_time}_rag_query_tree.jsonl"
                 os.makedirs(os.path.dirname(log_path), exist_ok=True)
                 with open(log_path, "a") as f:
                     for node in self._serialize_tree(root):
@@ -307,7 +309,8 @@ class Generator:
         strategy.prepare_samples(data, prompts, output_list)
 
         # 保存评估结果
-        strategy.save_results(self.config.output_dir,"rag", self.config.split,total_time, apply_backoff=False)
+        result_path = self.config.output_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"
+        strategy.save_results(result_path,"rag", self.config.split,total_time, apply_backoff=False)
         
         return [output.outputs[0].text for output in outputs]
     

@@ -185,6 +185,7 @@ class Config:
         
         ##模型和数据的路径
         self.model_path = model_path
+        self.model_name = os.path.basename(model_path)
         self.data_path = data_path
 
         ##检索服务的地址
@@ -625,7 +626,8 @@ class Generator:
         strategy.prepare_samples(data, input_list, output_list)
 
         # 保存评估结果
-        strategy.save_results(self.config.output_dir,"searcho1", self.config.split,total_time, apply_backoff=False)
+        result_path = self.config.output_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"
+        strategy.save_results(result_path,"searcho1", self.config.split,total_time, apply_backoff=False)
         
         return [output.outputs[0].text for output in outputs]
     

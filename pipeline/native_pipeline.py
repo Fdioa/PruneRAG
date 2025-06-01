@@ -95,7 +95,7 @@ def parse_args():
 
 class Config:
     def __init__(self, 
-                 model_path: str = "/workspace/Search-R1/models",
+                 model_path: str = "/workspace/Search-R1/models/llama-3.1-8b-instruct",
                  data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
                  dataset_name: str = "2wiki",
                  split: str = "test",
@@ -106,6 +106,7 @@ class Config:
                  repetition_penalty: float = 1.05,
                  output_dir: str = "./outputs"):
         self.model_path = model_path
+        self.model_name = os.path.basename(model_path)
         self.data_path = data_path
         self.dataset_name = dataset_name
         self.split = split
@@ -186,7 +187,8 @@ class Generator:
         strategy.prepare_samples(data, prompts, output_list)
 
         # 保存评估结果
-        strategy.save_results(self.config.output_dir,"native", self.config.split,total_time, apply_backoff=False)
+        result_path = self.config.output_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"
+        strategy.save_results(result_path,"native", self.config.split,total_time, apply_backoff=False)
         
         return [output.outputs[0].text for output in outputs]
 
