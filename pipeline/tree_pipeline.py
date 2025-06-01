@@ -196,22 +196,30 @@ class Generator:
 
 
         self.prompt_template = (
-            "Based on the documents,answer the following question:\n"
+            "Answer the following question:\n"
             "You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.\n"
+            "You can use the following documents to help you answer the question"
             "Documents: {context}\n\n"
             "Question: {question}\n\n"
         )
+
         self.subquery_prompt = (
-            "Please decompose the following query into two logically related sub-queries that can mutually verify each other:\n"
+            "Please decompose the following query into two logically related sub-queries that can form a logical deduction relationship:\n\n"
+            "Example:\n"
+            "Query: What nationality was James Henry Miller's wife?\n"
+            "Query_context: Dco 1: The Launceston by-election of 1874 was fought on 3 July 1874.The byelection was fought due to the void Election of the incumbent Conservative MP, James Henry Deakin (senior). It was won by the Conservative candidate James Henry Deakin (junior). Doc 2: James Henry Miller (25 January 1915 – 22 October 1989), better known by his stage name Ewan MacColl, was an English folk singer, songwriter, communist, labour activist, actor, poet, playwright and record producer. Doc 3: Incest: From a Journal of Love: The Unexpurgated Diary of Anaïs Nin (1932–1934) is a 1992 non-fiction book by Anaïs Nin. It is a continuation of the diary entries first published in \"Henry and June: From the Unexpurgated Diary of Anaïs Nin\".It features Nin's relationships with writer Henry Miller, his wife June Miller, the psychoanalyst Otto Rank, her father Joaquín Nin, and her husband Hugh Parker Guiler.She also copied some of her correspondence with these people into her diary. Much of this book was written in English, although those of her letters which were originally written in French and Spanish were translated.Most of this diary takes place in France, particularly Clichy, Paris and Louveciennes.\n"
+            "{{\"subquery1\": \"Who is James Henry Miller's wife?\", \"subquery2\": \"What was the nationality of June Miller?\"}}\n\n"
             "Query: {query}\n" 
+            "Query_context: {context}\n\n"
             "Please strictly follow the following Json format to return the results, no other redundant output: ```josn{{\"subquery1\": \"...\", \"subquery2\": \"...\"}}```"
             "Please do not output the thinking process and explanation, only output the JSON format result.\n"
         )
+        
         self.root_node = ContextTreeNode("ROOT")
         self.current_nodes = [self.root_node]
 
-    def _generate_subqueries(self, queries: List[str]) -> List[List[str]]:
-        prompts = [self.subquery_prompt.format(query=query) for query in queries]
+    def _generate_subqueries(self, nodes: List[ContextTreeNode]) -> List[List[str]]:
+        prompts = [self.subquery_prompt.format(query=node.query,context = node.context) for node in nodes]
         prompts = [{"role": "user", "content": up} for up in prompts]
         prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True) for p in prompts]
 
@@ -272,7 +280,7 @@ class Generator:
             ctx_idx = 0
             for node in nodes:
                 for child in node.children:
-                    if ctx_idx in context_map:
+                    if ctx_idx in context_map and child.query != "...":
                         child.context = context_map[ctx_idx]
                     ctx_idx += 1
         
@@ -296,10 +304,10 @@ class Generator:
             node_queue = []
             
             # 批量收集当前层级所有节点的原始查询
-            current_queries = [node.query for node in current_level_nodes]
+            # current_queries = [node.query for node in current_level_nodes]
             
             # 批量生成子查询
-            subqueries_batch = self._generate_subqueries(current_queries)
+            subqueries_batch = self._generate_subqueries(current_level_nodes)
             
             # 创建子节点并准备下一层处理
             for idx, node in enumerate(current_level_nodes):
@@ -395,16 +403,17 @@ class Generator:
 
     def _merge_tree_context(self, nodes: List[ContextTreeNode]) -> List[str]:
         results = []
+
         for node in nodes:
             from collections import deque
-            
+            idx = 0
             queue = deque([node])
             contexts = []
-            idx = 0
+            
             while queue:
                 current = queue.popleft()
                 if current.context:
-                    contexts.append(f"[Branch{idx}: {current.query}]\n{current.context}")
+                    contexts.append(f"[Branch {idx}: {current.query}]\n{current.context}")
                     idx += 1
                 queue.extend(current.children)
             
