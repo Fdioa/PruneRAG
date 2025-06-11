@@ -6,18 +6,6 @@ import re
 import string
 from collections import Counter
 
-    
-DATA_DIR = "data"
-HOTPOTQA_SPLIT_FILE = {
-  "train": "hotpot_train_v1.1_simplified.json",
-  "dev": "hotpot_dev_v1_simplified.json",
-  "test": "hotpot_test_v1_simplified.json",
-}
-
-FEVER_SPLIT_FILE = {
-  "train": "train.jsonl",
-  "dev": "paper_dev.jsonl",
-}
 
 
 class HistoryWrapper(gym.ObservationWrapper):
@@ -77,14 +65,13 @@ def f1_score(prediction, ground_truth):
   f1 = (2 * precision * recall) / (precision + recall)
   return f1, precision, recall
   
-class HotPotQAWrapper(gym.Wrapper):
-  def __init__(self, env, split):
+class QAWrapper(gym.Wrapper):
+  def __init__(self, env, data_dir):
     super().__init__(env)
-    data_file = f"{DATA_DIR}/{HOTPOTQA_SPLIT_FILE[split]}"
-    self.data = json.load(open(data_file))
-    self.data = [(d['question'], d['answer']) for d in self.data]
+
+    self.data = json.load(open(data_dir))
+    self.data = [(d['Question'], d['answer'][0]) for d in self.data]
     self.data_idx = 0
-    self.split = split
 
   def reset(self, seed=None, return_info=False, options=None, idx=None):
     self.env.reset(seed=seed, return_info=return_info, options=options)
@@ -108,16 +95,16 @@ class HotPotQAWrapper(gym.Wrapper):
 
   def get_reward(self, info):
     if info['answer'] is not None:
-      pred = normalize_answer(self.data[self.data_idx][1])
-      gt = normalize_answer(info['answer'])
+      pred = normalize_answer(info['answer'])
+      gt = normalize_answer(self.data[self.data_idx][1])
       score = (pred == gt)
       return int(score)
     return 0
   
   def get_metrics(self, info):
     if info['answer'] is not None:
-      pred = normalize_answer(self.data[self.data_idx][1])
-      gt = normalize_answer(info['answer'])
+      pred = normalize_answer(info['answer'])
+      gt = normalize_answer(self.data[self.data_idx][1])
       em = (pred == gt)
       f1 = f1_score(pred, gt)[0]
       return {'reward': em, 'em': em, 'f1': f1}
@@ -136,67 +123,6 @@ class HotPotQAWrapper(gym.Wrapper):
   def __len__(self):
     return len(self.data)
 
-class FeverWrapper(gym.Wrapper):
-  def __init__(self, env, split):
-    super().__init__(env)
-    
-    data_path = f"./data/{FEVER_SPLIT_FILE[split]}"
-    with open(data_path, "r") as json_file:
-      json_list = list(json_file)
-
-    data = []
-    for json_str in json_list:
-      json_str = json.loads(json_str)
-      label = json_str["label"]
-      claim = json_str["claim"]
-      data.append((claim, label))
-
-    self.data = data
-    self.data_idx = 0
-    self.split = split
-
-  def reset(self, seed=None, return_info=False, options=None, idx=None):
-    self.env.reset(seed=seed, return_info=return_info, options=options)
-    try:
-      self.env.step('')
-    except:
-      pass
-    self.env.reset(seed=seed, return_info=return_info, options=options)
-    self.data_idx = int(np.random.randint(len(self.data))) if idx is None else idx
-    observation = f"Claim: {self.data[self.data_idx][0]}"
-    info = self._get_info()
-    return (observation, info) if return_info else observation
-
-  def _get_info(self):
-    return {
-      "steps": self.steps, 
-      "answer": self.answer,
-      "question": self.data[self.data_idx][0], 
-      "fever_split": self.split
-    }
-
-  def get_reward(self, info):
-    if info['answer'] is not None:
-      label = normalize_answer(self.data[self.data_idx][1])
-      pred = normalize_answer(info['answer'])
-      if label == pred:
-        return 1
-    return 0
-
-  def step(self, action):
-    # TODO: first step obs does not have question. 
-    obs, _, done, info = self.env.step(action)
-    reward = self.get_reward(info)
-    if done:
-      obs = f"Episode finished, reward = {reward}\n"
-      info.update({"gt_answer": self.data[self.data_idx][1], "question_idx": self.data_idx})
-      info.update({'em': reward, 'reward': reward, 'f1': reward})
-    return obs, reward, done, info
-    
-  def __len__(self):
-    return len(self.data)
-  
-  
 class LoggingWrapper(gym.Wrapper):
   def __init__(self, env, folder="trajs", file_id=None):
     super().__init__(env)
@@ -224,6 +150,7 @@ class LoggingWrapper(gym.Wrapper):
     if done:
       self.traj.update(info)
     return obs, reward, done, info
+  
 
   def update_record(self):
     if len(self.traj) > 0:

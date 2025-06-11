@@ -86,7 +86,10 @@ class DatasetLoader:
             subset_num: 子集数量（-1表示全部）
         """
         data_path = self.get_data_path(dataset_name, split)
-        
+        print("Loading {dataset_name} dataset from {data_path}".format(
+            dataset_name=dataset_name.upper(),
+            data_path=data_path
+        ))
         with open(data_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
@@ -94,7 +97,7 @@ class DatasetLoader:
         if subset_num > 0:
             data = data[:subset_num]
             
-        return data
+        return data,data_path
     
 
 

@@ -152,7 +152,7 @@ class Generator:
 
     def generate(self, **sampling_params) -> List[str]:
 
-        data = self.dataset_loader.load_dataset(self.config.dataset_name, self.config.split)
+        data,data_path = self.dataset_loader.load_dataset(self.config.dataset_name, self.config.split)
 
         queries = [item['Question'] for item in data]
 

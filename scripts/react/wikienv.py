@@ -1,9 +1,6 @@
-import ast
-import json
 import time
 import gym
-import requests
-from bs4 import BeautifulSoup
+from scripts.search.retrieval_client import RetrievalClient, QueryRequest
 
 # import wikipedia
 
@@ -19,11 +16,12 @@ class textSpace(gym.spaces.Space):
 
 class WikiEnv(gym.Env):
 
-  def __init__(self):
+  def __init__(self,retrieval_url):
     """
       Initialize the environment.
     """
     super().__init__()
+    self.retrieval_client = RetrievalClient(base_url=retrieval_url)
     self.page = None  # current Wikipedia page
     self.obs = None  # current observation
     self.lookup_keyword = None  # current lookup keyword
@@ -95,31 +93,25 @@ class WikiEnv(gym.Env):
     #     break
     # return ret
 
+
   def search_step(self, entity):
-    entity_ = entity.replace(" ", "+")
-    search_url = f"https://en.wikipedia.org/w/index.php?search={entity_}"
-    old_time = time.time()
-    response_text = requests.get(search_url).text
-    self.search_time += time.time() - old_time
-    self.num_searches += 1
-    soup = BeautifulSoup(response_text, features="html.parser")
-    result_divs = soup.find_all("div", {"class": "mw-search-result-heading"})
-    if result_divs:  # mismatch
-      self.result_titles = [clean_str(div.get_text().strip()) for div in result_divs]
-      self.obs = f"Could not find {entity}. Similar: {self.result_titles[:5]}."
-    else:
-      page = [p.get_text().strip() for p in soup.find_all("p") + soup.find_all("ul")]
-      if any("may refer to:" in p for p in page):
-        self.search_step("[" + entity + "]")
-      else:
-        self.page = ""
-        for p in page:
-          if len(p.split(" ")) > 2:
-            self.page += clean_str(p)
-            if not p.endswith("\n"):
-              self.page += "\n"
+      old_time = time.time()
+      try:
+        # 从本地服务获取结构化数据
+        # response = requests.get(search_url).json()
+        request = QueryRequest(queries=[entity],topk = 3)
+        response = self.retrieval_client.query(request)
+
+        self.search_time += time.time() - old_time
+        result = ""
+        for idx,res in enumerate(response.results[0]):
+          result += res.document.contents
+        self.page = clean_str(result)
         self.obs = self.get_page_obs(self.page)
         self.lookup_keyword = self.lookup_list = self.lookup_cnt = None
+
+      except Exception as e:
+          self.obs = f"本地服务异常: {str(e)}"
   
   def step(self, action):
     reward = 0
