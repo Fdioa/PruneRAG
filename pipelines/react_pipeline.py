@@ -143,7 +143,9 @@ class Config:
                  top_p: float = 0.8,
                  repetition_penalty: float = 1.05,
                  output_dir: str = "./output",
-                 log_dir: str = "./logs"):
+                 log_dir: str = "./logs",
+                 seed: int = 3407):
+        self.seed = seed
         self.model_path = model_path
         self.model_name = os.path.basename(model_path)
         self.data_path = data_path
@@ -178,6 +180,7 @@ class Generator:
             model=config.model_path,
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=0.90,
+            seed = config.seed
             # max_model_len = 70000
             )
 
@@ -198,7 +201,7 @@ class Generator:
 (1) Search[entity], which searches the exact entity on Wikipedia and returns the first paragraph if it exists. If not, it will return some similar entities to search.
 (2) Lookup[keyword], which returns the next sentence containing keyword in the current passage.
 (3) Finish[answer], which returns the answer and finishes the task.
-Here are some examples.
+Here are an example.
 """
         self.webthink_prompt = self.instruction + self.webthink_examples + "Question: "
 
@@ -229,12 +232,12 @@ Here are some examples.
         "r":0
         } for prompt in prompts]
 
-
-        for i in range(1, 8):
+        unfinished_seqs = [state for state in batch_states if not state['done']]
+        i = 1
+        while i <= 7 and unfinished_seqs:
 
 
             print(f"------------------------Turn{i}-------------------------")
-            unfinished_seqs = [state for state in batch_states if not state['done']]
             params = SamplingParams(
                 max_tokens=self.config.max_tokens,
                 temperature=self.config.temperature,
@@ -256,8 +259,17 @@ Here are some examples.
                 for match in re.finditer(pattern, tal):
                     last_match = match
                 if last_match:
-                    return tal[:last_match.start()].strip(), tal[last_match.end():].strip()
-
+                    command_names = ["Search", "Lookup", "Finish", "Think"]
+                    full_pattern = r"({})\[(.*?)\]".format("|".join(command_names))
+                    full_matches = re.findall(full_pattern, tal[last_match.end():].strip())
+                    if full_matches:
+                        # 如果找到了完整的Action，返回分割后的Thought和Action
+                        action_pure = f"{full_matches[0][0]}"+f"[{full_matches[0][1]}]"
+                        return tal[:last_match.start()].strip(), action_pure.strip()  # 返回分割后的Thought和Action
+                    else:
+                        # 如果没有找到完整的Action，返回分割后的Thought和空字符串
+                        print("无动作生成")
+                        return tal.strip().split('\n')[0], "Invalid[no action]"
                 else:
                     print("无动作生成")
                     return tal.strip().split('\n')[0], "Invalid[no action]"  # 如果没有找到分割点，返回整个字符串和空字符串
@@ -271,14 +283,14 @@ Here are some examples.
                 thought_list.append(thought)
                 action_list.append(action)
 
-            # 检查action_list中是否有空字符串
+            # 检查action_list中是否有无效字符串
             indices = []
             for index, item in enumerate(action_list):
-                if item == "Invalid[noaction]":
+                if item == "Invalid[no action]":
                     indices.append(index)
             if len(indices) != 0 :
-                # 如果没有空字符串，直接执行
-
+                #如果有无效的action，则重新生成
+                print(f"ohh... 格式错误！重新生成Action...")
             
                 new_thought_list = []
                 new_prompts = []
@@ -287,9 +299,6 @@ Here are some examples.
                     prompt = unfinished_seqs[index]['prompt'] + f"Thought {i}: " + thought_list[index] + f"\nAction {i}:"
                     new_prompts.append(prompt)
 
-                
-                print('ohh...\n')
-                print(f'ohh... 格式错误！\n')
 
                 params = SamplingParams(
                     max_tokens=self.config.max_tokens,
@@ -310,18 +319,21 @@ Here are some examples.
                 for index, action in zip(indices, new_action_list):
                     action_list[index] = action.strip()
 
-            # TODO
+            # 遍历所有未完成的序列、动作列表，执行相应的动作
             for index, (seq, thought, action) in enumerate(zip(unfinished_seqs,thought_list,action_list)):
                 obs, r, done, info = self.step(seq['env'], action.lower())
                 obs = obs.replace('\\n', '')
                 step_str = f"Thought {i}: {thought}\nAction {i}: {action}\nObservation {i}: {obs}\n"
                 seq['prompt'] += step_str
+                # print(step_str)
                 seq['done'] = done
                 if done:
                     seq['info'] = info
                     seq['r'] = r
+            unfinished_seqs = [state for state in batch_states if not state['done']]
+            i+= 1
         
-        
+        #检查所有未完成的序列，生成空答案的Finish动作
         for seq in unfinished_seqs:
             if seq['done']:
                 continue
@@ -387,7 +399,7 @@ if __name__ == "__main__":
 
 
     # config = Config(
-    #     model_path="/workspace/Search-R1/models/ds-0528-qwen3-8b",
+    #     model_path="/workspace/Search-R1/models/qwen3-8b",
     #     data_path="/workspace/Search-R1/config/dataset_paths.json",
     #     retrieval_url="http://localhost:8000",
     #     dataset_name="example",

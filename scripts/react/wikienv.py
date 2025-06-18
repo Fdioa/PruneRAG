@@ -105,7 +105,7 @@ class WikiEnv(gym.Env):
         self.search_time += time.time() - old_time
         result = ""
         for idx,res in enumerate(response.results[0]):
-          result += res.document.contents
+          result += res.document.contents + "\n"
         self.page = clean_str(result)
         self.obs = self.get_page_obs(self.page)
         self.lookup_keyword = self.lookup_list = self.lookup_cnt = None
@@ -123,8 +123,7 @@ class WikiEnv(gym.Env):
     
     if action.startswith("search[") and action.endswith("]"):
       entity = action[len("search["):-1]
-      # entity_ = entity.replace(" ", "_")
-      # search_url = f"https://en.wikipedia.org/wiki/{entity_}"
+
       self.search_step(entity)
     elif action.startswith("lookup[") and action.endswith("]"):
       keyword = action[len("lookup["):-1]
