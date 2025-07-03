@@ -6,7 +6,6 @@ import torch
 import json ,re, argparse
 from datetime import datetime
 import os,sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.data_loader import DatasetLoader
 from scripts.evaluater import EvaluationStrategyFactory
 from scripts.seed import setup_seed
@@ -104,7 +103,9 @@ class Config:
                  top_k: int = 20,
                  top_p: float = 0.8,
                  repetition_penalty: float = 1.05,
-                 output_dir: str = "./outputs"):
+                 output_dir: str = "./outputs",
+                 seed: int = 3407):
+        self.seed = seed
         self.model_path = model_path
         self.data_path = data_path
         self.dataset_name = dataset_name
@@ -126,6 +127,7 @@ class Generator:
             model=config.model_path,
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=0.90,
+            seed=config.seed,
             # max_model_len = 70000
             )
 

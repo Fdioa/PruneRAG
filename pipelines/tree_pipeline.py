@@ -1,19 +1,23 @@
 import logging
-from typing import List, Dict, Any
-
+from typing import List, Dict, Any, Union
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
-
 import torch
 import concurrent.futures
-import json ,re,argparse
+import json ,re, argparse
 from datetime import datetime
 import os,sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.data_loader import DatasetLoader
 from scripts.evaluater import EvaluationStrategyFactory
 from scripts.seed import setup_seed
 from scripts.search.retrieval_client import RetrievalClient, QueryRequest
+from prompts import (
+                    get_subqueries_qwen3_8b,
+                    get_subqueries_qwen3_8b_first,
+                    get_final_answer_qwen3_8b,
+                    get_subqueries_llama3_8b_first,
+                    get_subqueries_llama3_8b,
+                    get_final_answer_llama3_8b)
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +51,7 @@ def parse_args():
         '--dataset_name',
         type=str,
         required=True,
-        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle','example'],
+        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle','example','popqa','fever'],
         help="数据集名称"
     )
 
@@ -95,6 +99,13 @@ def parse_args():
     )
 
     parser.add_argument(
+        '--all_decom_depth',
+        type=int,
+        default=1,
+        help="强制查询分解的最大深度"
+    )
+
+    parser.add_argument(
         '--max_tokens',
         type=int,
         default=10240,
@@ -131,7 +142,7 @@ def parse_args():
 
 class Config:
     def __init__(self, 
-                 model_path: str = "/workspace/Search-R1/models/llama-3.1-8b-instruct",
+                 model_path: str = "/workspace/Search-R1/models",
                  retrieval_url: str = "http://localhost:8000",
                  data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
                  dataset_name: str = "2wiki",
@@ -139,13 +150,16 @@ class Config:
                  topk: int = 3,
                  max_context_length: int = 4096,
                  max_depth: int = 3,
+                 all_decom_depth: int = 1,
                  max_tokens: int = 10240,
                  temperature: float = 0.7,
                  top_k: int = 20,
                  top_p: float = 0.8,
                  repetition_penalty: float = 1.05,
                  output_dir: str = "./outputs",
-                 log_dir: str = "./logs"):
+                 log_dir: str = "./logs",
+                 seed: int = 3407):
+        self.seed = seed
         self.model_path = model_path
         self.model_name = os.path.basename(model_path)
         self.data_path = data_path
@@ -155,6 +169,7 @@ class Config:
         self.topk = topk
         self.max_context_length = max_context_length
         self.max_depth = max_depth
+        self.all_decom_depth = all_decom_depth
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.top_k = top_k
@@ -167,6 +182,7 @@ class Config:
 class ContextTreeNode:
     def __init__(self, query: str, parent=None):
         self.query = query
+        self.query_answer: str = ""
         self.depth = parent.depth + 1 if parent else 0
         self.subqueries: List[str] = []
         self.context: str = ""
@@ -181,8 +197,7 @@ class Generator:
             model=config.model_path,
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=0.90,
-            # max_model_len = 70000
-            )
+            seed = config.seed)
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             config.model_path,
@@ -195,81 +210,117 @@ class Generator:
         self.retrieval_client = RetrievalClient(base_url=config.retrieval_url)
         self.dataset_loader = DatasetLoader(self.config.data_path)
 
-
-        self.prompt_template = (
-            "Answer the following question:\n"
-            "You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.\n"
-            "You can use the following documents to help you answer the question"
-            "Documents: {context}\n\n"
-            "Question: {question}\n\n"
-        )
-
-        self.subquery_prompt = (
-            "Please decompose the following query into two logically related sub-queries that can form a logical deduction relationship:\n\n"
-            "Example:\n"
-            "Query: What nationality was James Henry Miller's wife?\n"
-            "Query_context: Dco 1: The Launceston by-election of 1874 was fought on 3 July 1874.The byelection was fought due to the void Election of the incumbent Conservative MP, James Henry Deakin (senior). It was won by the Conservative candidate James Henry Deakin (junior). Doc 2: James Henry Miller (25 January 1915 – 22 October 1989), better known by his stage name Ewan MacColl, was an English folk singer, songwriter, communist, labour activist, actor, poet, playwright and record producer. Doc 3: Incest: From a Journal of Love: The Unexpurgated Diary of Anaïs Nin (1932–1934) is a 1992 non-fiction book by Anaïs Nin. It is a continuation of the diary entries first published in \"Henry and June: From the Unexpurgated Diary of Anaïs Nin\".It features Nin's relationships with writer Henry Miller, his wife June Miller, the psychoanalyst Otto Rank, her father Joaquín Nin, and her husband Hugh Parker Guiler.She also copied some of her correspondence with these people into her diary. Much of this book was written in English, although those of her letters which were originally written in French and Spanish were translated.Most of this diary takes place in France, particularly Clichy, Paris and Louveciennes.\n"
-            "{{\"subquery1\": \"Who is James Henry Miller's wife?\", \"subquery2\": \"What was the nationality of June Miller?\"}}\n\n"
-            "Query: {query}\n" 
-            "Query_context: {context}\n\n"
-            "Please strictly follow the following Json format to return the results, no other redundant output: ```josn{{\"subquery1\": \"...\", \"subquery2\": \"...\"}}```"
-            "Please do not output the thinking process and explanation, only output the JSON format result.\n"
-        )
-
         self.root_node = ContextTreeNode("ROOT")
         self.current_nodes = [self.root_node]
 
+        if 'qwen' in self.config.model_name:
+            self.subquery_first_template = get_subqueries_qwen3_8b_first()
+            self.subquery_template = get_subqueries_qwen3_8b()
+            self.answer_template = get_final_answer_qwen3_8b()
+        elif 'llama' in self.config.model_name:
+            self.subquery_first_template = get_subqueries_llama3_8b_first()
+            self.subquery_template = get_subqueries_llama3_8b()
+            self.answer_template = get_final_answer_llama3_8b()
+
+
     def _generate_subqueries(self, nodes: List[ContextTreeNode]) -> List[List[str]]:
-        prompts = [self.subquery_prompt.format(query=node.query,context = node.context) for node in nodes]
+
+        if nodes[0].depth > self.config.all_decom_depth:
+            prompts = [self.subquery_template.format(query=node.query, parent_query=node.parent.query, context=node.context) for node in nodes]
+        else:
+            prompts = [self.subquery_first_template.format(query=node.query, context = node.context) for node in nodes]
         prompts = [{"role": "user", "content": up} for up in prompts]
         prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True) for p in prompts]
 
         params = SamplingParams(
             max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
-            top_p=self.config.top_p,
-            top_k=self.config.top_k,
-            repetition_penalty=self.config.repetition_penalty,
+            temperature=0,
+            # top_p=self.config.top_p,
+            # top_k=self.config.top_k,
+            # repetition_penalty=self.config.repetition_penalty,
         )
         outputs = self.llm.generate(prompts, params)
-        result = []
+        result: List[Dict[str, Union[str, List[str]]]] = []
         for output in outputs:
             subqueries_text = output.outputs[0].text.strip()
+            processed_item: Dict[str, Union[str, List[str]]] = {}
 
-            pattern = r'\{.*?"subquery1".*?\}'
-            matches = re.findall(pattern, subqueries_text, re.DOTALL)
-            if matches:
-                json_str = matches[-1]
+            decomposition_pattern = r'\{.*?"subquery1".*?\}'
+            decomposition_matches = re.findall(decomposition_pattern, subqueries_text, re.DOTALL)
+            if decomposition_matches:
+                json_str = decomposition_matches[-1]
                 
-            try:
-                subqueries_json = json.loads(json_str)
-                result.append([
-                    subqueries_json['subquery1'].strip(), 
-                    subqueries_json['subquery2'].strip()
-                ])
-            except Exception as e:
-                logger.warning(f"子查询解析失败: {e}")
-                result.append([])
-        return result
+                try:
+                    subqueries_json = json.loads(json_str)
+                    processed_item = {
+                        "type": "decomposition",  # 明确的类型标识符
+                        "subqueries": [          # 子查询列表
+                            (subqueries_json['subquery1'] or "").strip(),       #避免出现空查询导致程序退出
+                            (subqueries_json['subquery2'] or "").strip()
+                        ]
+                    }
+                except json.JSONDecodeError as e: # 捕获特定的 JSON 解析错误
+                    # logger.warning(f"子查询分解 JSON 解析失败: {e}，文本为: {json_str}")
+                    processed_item = {"type": "error", "message": f"JSON 解析错误: {e}"}
+                except KeyError as e: # 捕获键缺失错误
+                    # logger.warning(f"子查询键缺失: {e}，JSON 为: {json_str}")
+                    processed_item = {"type": "error", "message": f"键缺失错误: {e}"}
+                except Exception as e: # 捕获所有其他意外错误
+                    # logger.error(f"发生未预期错误: {e}，JSON 为: {json_str}", exc_info=True)
+                    processed_item = {"type": "error", "message": f"未知错误: {e}"}
+
+
+            else:
+                answer_pattern = r'\{.*?"answer".*?\}'
+                answer_matches = re.findall(answer_pattern, subqueries_text, re.DOTALL)
+
+                if answer_matches:
+                    json_str = answer_matches[-1]
+                    try:
+                        query_answer_json = json.loads(json_str)
+                        processed_item = {
+                                "type": "answer",  # 明确的类型标识符
+                                "answer": (str(query_answer_json['answer']) or "").strip() # 直接答案
+                            }
+
+                    except json.JSONDecodeError as e:
+                        # logger.warning(f"直接答案 JSON 解析失败: {e}，文本为: {json_str}")
+                        processed_item = {"type": "error", "message": f"JSON 解析错误: {e}"}
+                    except KeyError as e:
+                        # logger.warning(f"答案键缺失: {e}，JSON 为: {json_str}")
+                        processed_item = {"type": "error", "message": f"键缺失错误: {e}"}
+                    except Exception as e: # 捕获所有其他意外错误
+                        # logger.error(f"发生未预期错误: {e}，JSON 为: {json_str}", exc_info=True)
+                        processed_item = {"type": "error", "message": f"未知错误: {e}"}
+                else:                
+                    # 对于非预期或格式错误的输出，提供一个回退
+                    # logger.warning(f"LLM 输出中未找到有效的 JSON 模式: {subqueries_text}")
+                    processed_item = {"type": "error", "message": "未找到有效模式"}
+
+            result.append(processed_item)
+
+    
+        return result,outputs
     
     def _retrieve_context(self, queries: List[str]) -> Dict[int, str]:
         request = QueryRequest(queries=queries, topk=self.config.topk)
         response = self.retrieval_client.query(request)
         context_map = {}
         for idx, results in enumerate(response.results):
+            
             context = "\n".join([f"[Doc {i+1}] {res.document.contents}" for i, res in enumerate(results)])
             context_map[idx] = context
         return context_map
 
     def _parallel_retrieve(self, subqueries: List[str]) -> Dict[int, str]:
-        context_map = {}
+        # 直接尝试调用 _retrieve_context 并返回其结果
         try:
-            batch_results = self._retrieve_context(subqueries)
-            for idx, context in batch_results.items():
-                context_map[idx] = context
+            return self._retrieve_context(subqueries)
         except Exception as exc:
             logger.error(f'批量检索失败: {exc}')
-        return context_map
+            # 发生错误时返回一个空字典，符合原函数的行为
+            return {}
+        
 
     def _process_nodes_context(self, nodes: List[ContextTreeNode]):
         # 收集所有子查询
@@ -302,6 +353,7 @@ class Generator:
         self._process_nodes_context([self.root_node])
 
         current_depth = 1
+        all_processed_outputs_log = []
         while current_depth < self.config.max_depth:
             current_level_nodes = node_queue
             node_queue = []
@@ -310,38 +362,70 @@ class Generator:
             # current_queries = [node.query for node in current_level_nodes]
             
             # 批量生成子查询
-            subqueries_batch = self._generate_subqueries(current_level_nodes)
-            
-            # 创建子节点并准备下一层处理
-            for idx, node in enumerate(current_level_nodes):
-                node.subqueries = subqueries_batch[idx]
-                if not node.subqueries:
-                    continue
-                
-                # 创建子节点并加入队列
-                for subq in node.subqueries:
-                    child_node = ContextTreeNode(subq, parent=node)
-                    node.children.append(child_node)
-                    node_queue.append(child_node)
+            processed_results,processed_outputs = self._generate_subqueries(current_level_nodes)
 
-            # 批量处理当前层级的子节点获取山下文
-            self._process_nodes_context(current_level_nodes)
+            processed_outputs_log = []
+            for output, nodes in zip(processed_outputs, current_level_nodes):
+                log = {
+                    "timestamp": datetime.now().isoformat(),
+                    "query": nodes.query,
+                    "outputs": output.outputs[0].text
+                }
+                processed_outputs_log.append(log)
+            
+            all_processed_outputs_log.extend(processed_outputs_log)
+
+
+            
+            # 处理返回的结果，返回子查询则新建节点，返回答案则记录答案
+            for idx, node in enumerate(current_level_nodes):
+
+                if processed_results[idx].get("type") == "decomposition":
+                    # 如果是分解子查询，直接使用
+                    node.subqueries = processed_results[idx]["subqueries"]
+
+                    # 创建子节点并加入队列
+                    for subq in node.subqueries:
+                        child_node = ContextTreeNode(subq, parent=node)
+                        node.children.append(child_node)
+                        node_queue.append(child_node)
+                    
+
+                elif processed_results[idx].get("type") == "answer":
+                    # 如果是直接答案，记录答案并跳过子查询生成
+                    node.query_answer = processed_results[idx]["answer"]
+                    node.subqueries = []
+                elif processed_results[idx].get("type") == "error":
+                    # 如果是错误，记录错误信息并跳过子查询生成
+                    logger.error(f"处理节点 {node.query} 时发生错误: {processed_results[idx]['message']}")
+                    node.subqueries = []
+                else:
+                    # 对于未知类型，记录日志并跳过
+                    logger.warning(f"未知处理类型: {processed_results[idx]}")
+                    node.subqueries = []
+
+            # 批量处理当前层级的子节点获取上下文
+
+            #获取当前层级中有子节点的节点
+            current_level_nodes_child = [node for node in current_level_nodes if node.children]
+            self._process_nodes_context(current_level_nodes_child)
 
             current_depth += 1
         
+
         # 批量生成最终答案
-        combined_contexts = self._merge_tree_context(root_nodes)
-        prompts = [self.prompt_template.format(context=ctx, question=root.query) 
-                  for ctx, root in zip(combined_contexts, root_nodes)]
+        combined_tree = self._merge_tree(root_nodes)
+        prompts = [self.answer_template.format(context=tree, question=root.query) 
+                  for tree, root in zip(combined_tree, root_nodes)]
         prompts = [{"role": "user", "content": up} for up in prompts]
         prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True) for p in prompts]
         
         params = SamplingParams(
             max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
-            top_p=self.config.top_p,
-            top_k=self.config.top_k,
-            repetition_penalty=self.config.repetition_penalty,
+            temperature=0,
+            # top_p=self.config.top_p,
+            # top_k=self.config.top_k,
+            # repetition_penalty=self.config.repetition_penalty,
         )
 
         outputs = self.llm.generate(prompts, params)
@@ -349,26 +433,7 @@ class Generator:
         output_list = []
         for output in outputs:
             output_list.append(output.outputs[0].text)
-        
-        # 记录查询树结构
-        results = []
-        for output, root in zip(outputs, root_nodes):
-            result = {
-                "timestamp": datetime.now().isoformat(),
-                "query_tree": self._serialize_tree(root),
-                "final_answer": output.outputs[0].text
-            }
-            results.append(result)
-            
-            # 保存到JSONL文件
-            try:
-                log_path= self.config.log_dir +f"/{self.config.model_name}"+f"/{self.config.dataset_name}"+f"/{self.start_time}_tree_query_tree.jsonl"
-                os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                with open(log_path, "a") as f:
-                    for node in self._serialize_tree(root):
-                        f.write(json.dumps(node, ensure_ascii=False) + '\n')
-            except Exception as e:
-                logger.warning(f"查询树节点记录失败: {e}")
+
 
         # 计算总耗时
         total_time = (datetime.now() - self.start_time).total_seconds()
@@ -381,7 +446,41 @@ class Generator:
 
         # 保存评估结果
         result_path = self.config.output_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"
-        strategy.save_results(result_path,"tree", self.config.split,total_time, apply_backoff=False)
+        strategy.save_results(result_path,"tree", self.config.split,total_time, self.start_time, apply_backoff=False)
+
+
+        # 记录查询树结构
+        results = []
+        for output, root in zip(outputs, root_nodes):
+            result = {
+                "timestamp": datetime.now().isoformat(),
+                "query_tree": self._serialize_tree(root),
+                "final_answer": output.outputs[0].text
+            }
+            results.append(result)
+            
+            # 保存到JSONL文件
+            try:
+                log_path= self.config.log_dir +f"/{self.config.model_name}"+f"/{self.config.dataset_name}"+f"/{self.start_time.strftime('%m-%d %H:%M')}_tree_query_tree.jsonl"
+                os.makedirs(os.path.dirname(log_path), exist_ok=True)
+                with open(log_path, "a") as f:
+                    for node in self._serialize_tree(root):
+                        f.write(json.dumps(node, ensure_ascii=False) + '\n')
+            except Exception as e:
+                logger.warning(f"查询树节点记录失败: {e}")
+
+
+        # 记录子查询生成结果
+        jsonl_path = self.config.log_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"+f"/outputs"+ f"/{self.start_time.strftime('%m-%d %H:%M')}_tree_subqueries_outputs.jsonl"
+        os.makedirs(os.path.dirname(jsonl_path), exist_ok=True)
+    
+        try:
+            with open(jsonl_path, "a") as f:
+                for log in all_processed_outputs_log:
+                    f.write(json.dumps(log, ensure_ascii=False) + '\n')
+        except Exception as e:
+            logger.warning(f"子查询生成结果记录失败: {e}")
+
         
         return [output.outputs[0].text for output in outputs]
 
@@ -396,6 +495,7 @@ class Generator:
             node_data = {
                 "timestamp": datetime.now().isoformat(),
                 "query": current.query,
+                "query_answer": current.query_answer,
                 "depth": current.depth,
                 "subqueries": current.subqueries,
                 "context": current.context,
@@ -405,29 +505,44 @@ class Generator:
             queue.extend(current.children)
         return nodes_list
 
-    def _merge_tree_context(self, nodes: List[ContextTreeNode]) -> List[str]:
+    def _merge_tree(self, nodes: List[ContextTreeNode]) -> List[str]:
+        import json
         results = []
-
+        
+        def build_tree(node):
+            tree = {
+                "query": node.query,
+                "answer": node.query_answer,
+                "context": node.context,
+                "children": [build_tree(child) for child in node.children]
+            }
+            return tree
+        
         for node in nodes:
-            from collections import deque
-            idx = 0
-            queue = deque([node])
-            contexts = []
-            
-            while queue:
-                current = queue.popleft()
-                if current.context:
-                    contexts.append(f"[Branch {idx}: {current.query}]\n{current.context}")
-                    idx += 1
-                queue.extend(current.children)
-            
-            results.append("\n\n".join(contexts[:self.config.topk*3]))
+            tree_structure = build_tree(node)
+            results.append(json.dumps(tree_structure, ensure_ascii=False))
         
         return results
 
 if __name__ == "__main__":
 
+    print("Starting tree pipeline...\n Time:", datetime.now())
+    
     setup_seed(3407)
+
+    # config = Config(
+    #     model_path="/workspace/Search-R1/models/qwen3-8b",
+    #     data_path="/workspace/Search-R1/config/dataset_paths.json",
+    #     retrieval_url="http://localhost:8000",
+    #     dataset_name="example",
+    #     split="test",
+    #     topk=3,
+    #     max_depth=3,
+    #     output_dir="./outputs",
+    #     log_dir="./logs"
+
+    # )
+
     args = parse_args()
     config = Config(
         model_path=args.model_path,
@@ -437,6 +552,7 @@ if __name__ == "__main__":
         split=args.split,
         topk=args.topk,
         max_depth=args.max_depth,
+        all_decom_depth=args.all_decom_depth,
         max_context_length=args.max_context_length,
         max_tokens=args.max_tokens,
         temperature=args.temperature,

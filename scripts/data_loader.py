@@ -13,7 +13,7 @@ class DatasetLoader:
         dataset_config (Dict): 数据集路径配置字典
     """
     
-    def __init__(self, config_path: str = './config/dataset_paths.json'):
+    def __init__(self, config_path: str = '/workspace/Search-R1/configs/dataset_paths.json'):
         """
         初始化加载器并加载配置文件
         
@@ -59,7 +59,7 @@ class DatasetLoader:
             return os.path.join(base_path, path_template.format(split=split))
         
         # 处理QA数据集
-        if dataset_name in ['nq', 'triviaqa', 'hotpotqa','2wiki','bamboogle','musique','example']:
+        if dataset_name in ['nq', 'triviaqa', 'hotpotqa','2wiki','bamboogle','musique','example','fever','popqa']:
             return os.path.join(base_path, path_template.format(dataset_name=dataset_name))
         
         # 默认处理方式
@@ -86,10 +86,12 @@ class DatasetLoader:
             subset_num: 子集数量（-1表示全部）
         """
         data_path = self.get_data_path(dataset_name, split)
+
         print("Loading {dataset_name} dataset from {data_path}".format(
             dataset_name=dataset_name.upper(),
             data_path=data_path
         ))
+        
         with open(data_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
@@ -112,11 +114,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # 初始化加载器
-    loader = DatasetLoader("./config/dataset_paths.json")
+    loader = DatasetLoader()
     
     try:
         print(f"正在加载{args.dataset.upper()}数据集（{args.split}划分）...")
-        data = loader.load_dataset(args.dataset, args.split, subset_num=args.subset_num)
+        data,data_path = loader.load_dataset(args.dataset, args.split, subset_num=args.subset_num)
         print(f"成功加载 {len(data)} 条记录")
 
         # queries = []

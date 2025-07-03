@@ -1,69 +1,3 @@
-def get_gpqa_search_o1_instruction(MAX_SEARCH_LIMIT):
-    return (
-        "You are a reasoning assistant with the ability to perform web searches to help "
-        "you answer the user's question accurately. You have special tools:\n\n"
-        "- To perform a search: write <|begin_search_query|> your query here <|end_search_query|>.\n"
-        "Then, the system will search and analyze relevant web pages, then provide you with helpful information in the format <|begin_search_result|> ...search results... <|end_search_result|>.\n\n"
-        f"You can repeat the search process multiple times if necessary. The maximum number of search attempts is limited to {MAX_SEARCH_LIMIT}.\n\n"
-        "Once you have all the information you need, continue your reasoning.\n\n"
-        "Example:\n"
-        "Question: \"What is the energy range of pp III neutrinos?\"\n"
-        "Assistant thinking steps:\n"
-        "- I might need to look up details about pp III neutrinos.\n\n"
-        "Assistant:\n"
-        "<|begin_search_query|>pp III neutrino energy spectrum<|end_search_query|>\n\n"
-        "(System returns processed information from relevant web pages)\n\n"
-        "Assistant continues reasoning with the new information...\n\n"
-        "Remember:\n"
-        "- Use <|begin_search_query|> to request a web search and end with <|end_search_query|>.\n"
-        "- When done searching, continue your reasoning.\n\n"
-    )
-
-
-def get_math_search_o1_instruction(MAX_SEARCH_LIMIT):
-    return (
-        "You are a reasoning assistant with the ability to perform web searches to help "
-        "you answer the user's question accurately. You have special tools:\n\n"
-        "- To perform a search: write <|begin_search_query|> your query here <|end_search_query|>.\n"
-        "Then, the system will search and analyze relevant web pages, then provide you with helpful information in the format <|begin_search_result|> ...search results... <|end_search_result|>.\n\n"
-        f"You can repeat the search process multiple times if necessary. The maximum number of search attempts is limited to {MAX_SEARCH_LIMIT}.\n\n"
-        "Once you have all the information you need, continue your reasoning.\n\n"
-        "Example:\n"
-        "Question: \"How do you compute the integral of e^(x^2) dx?\"\n"
-        "Assistant thinking steps:\n"
-        "- I might need to look up techniques for integrating e^(x^2).\n\n"
-        "Assistant:\n"
-        "<|begin_search_query|>methods to integrate e^(x^2)<|end_search_query|>\n\n"
-        "(System returns processed information from relevant web pages)\n\n"
-        "Assistant continues reasoning with the new information...\n\n"
-        "Remember:\n"
-        "- Use <|begin_search_query|> to request a web search and end with <|end_search_query|>.\n"
-        "- When done searching, continue your reasoning.\n\n"
-    )
-
-
-def get_code_search_o1_instruction(MAX_SEARCH_LIMIT):
-    return (
-        "You are a reasoning assistant with the ability to perform web searches to help "
-        "you answer the user's question accurately. You have special tools:\n\n"
-        "- To perform a search: write <|begin_search_query|> your query here <|end_search_query|>.\n"
-        "Then, the system will search and analyze relevant web pages, then provide you with helpful information in the format <|begin_search_result|> ...search results... <|end_search_result|>.\n\n"
-        f"You can repeat the search process multiple times if necessary. The maximum number of search attempts is limited to {MAX_SEARCH_LIMIT}.\n\n"
-        "Once you have all the information you need, continue your reasoning.\n\n"
-        "Example:\n"
-        "Question: \"Find the minimum number of vertices in a Steiner tree that includes all specified vertices in a given tree.\"\n"
-        "Assistant thinking steps:\n"
-        "- I need to understand what a Steiner tree is and how to compute the minimum number of vertices required to include all specified vertices in a given tree.\n\n"
-        "Assistant:\n"
-        "<|begin_search_query|>Minimum Steiner Tree problem in trees<|end_search_query|>\n\n"
-        "(System returns processed information from relevant web pages)\n\n"
-        "Assistant continues reasoning with the new information...\n\n"
-        "Remember:\n"
-        "- Use <|begin_search_query|> to request a web search and end with <|end_search_query|>.\n"
-        "- When done searching, continue your reasoning.\n\n"
-    )
-
-
 def get_webpage_to_reasonchain_instruction(prev_reasoning, search_query, document):
     return f"""**Task Instruction:**
 
@@ -103,7 +37,6 @@ No helpful information found.
 
 Now you should analyze each web page and find helpful information based on the current search query "{search_query}" and previous reasoning steps.
 """
-
 
 def get_singleqa_search_o1_instruction(MAX_SEARCH_LIMIT):
     return (
@@ -152,205 +85,6 @@ def get_multiqa_search_o1_instruction(MAX_SEARCH_LIMIT):
         "- When done searching, continue your reasoning.\n\n"
     )
 
-    
-def get_singleqa_rag_agent_instruction(MAX_SEARCH_LIMIT, MAX_URL_FETCH):
-    return (
-        "You are a reasoning assistant with the ability to perform web searches and retrieve webpage content to help "
-        "you answer the user’s question accurately. You have special tools:\n\n"
-        "- To perform a search: write <|begin_search_query|> your query here <|end_search_query|>.\n"
-        "Then, the system will call the web search API with your query and return the search results to you in the format <|begin_search_result|> ...search results... <|end_search_result|>.\n"
-        "  The search results will contain a list of webpages with titles, URLs, and snippets (but not full content).\n\n"
-        "- After receiving the search results, if you need more detailed information from one or more specific URLs, write <|begin_url|> url1, url2, ... <|end_url|>.\n"
-        "  The system will fetch the full page content of those URLs and return it to you as <|begin_full_page|> ...full page content... <|end_full_page|>.\n\n"
-        f"You can repeat the search process multiple times if necessary. The maximum number of search attempts is limited to {MAX_SEARCH_LIMIT}.\n"
-        f"You can fetch up to {MAX_URL_FETCH} URLs for detailed information.\n\n"
-        "Once you have all the information you need, continue your reasoning.\n\n"
-        "Example:\n"
-        "Question: \"Who got the first Nobel Prize in Physics?\"\n"
-        "Assistant thinking steps:\n"
-        "- I need to find out who was awarded the first Nobel Prize in Physics.\n\n"
-        "Assistant:\n"
-        "<|begin_search_query|>first Nobel Prize in Physics winner<|end_search_query|>\n\n"
-        "(System returns search results)\n\n"
-        "Assistant:\n"
-        "<|begin_search_result|> ...search results without full page... <|end_search_result|>\n\n"
-        "Assistant thinks: The search results mention several URLs. I want full details from one of them.\n\n"
-        "Assistant:\n"
-        "<|begin_url|>http://example.com/first_nobel_physics.html<|end_url|>\n\n"
-        "(System returns full page content)\n\n"
-        "Assistant:\n"
-        "<|begin_full_page|> ...full page content... <|end_full_page|>\n\n"
-        "Now the assistant has enough info and can continue reasoning.\n\n"
-        "Remember:\n"
-        "- Use <|begin_search_query|> to request a web search and end with <|end_search_query|>.\n"
-        "- Use <|begin_url|> to request full page content and end with <|end_url|>.\n"
-        "- When done retrieving information, continue your reasoning.\n\n"
-    )
-
-
-def get_multiqa_rag_agent_instruction(MAX_SEARCH_LIMIT, MAX_URL_FETCH):
-    return (
-        "You are a reasoning assistant with the ability to perform web searches and retrieve webpage content to help "
-        "you answer the user’s question accurately. You have special tools:\n\n"
-        "- To perform a search: write <|begin_search_query|> your query here <|end_search_query|>.\n"
-        "Then, the system will call the web search API with your query and return the search results to you in the format <|begin_search_result|> ...search results... <|end_search_result|>.\n"
-        "  The search results will contain a list of webpages with titles, URLs, and snippets (but not full content).\n\n"
-        "- After receiving the search results, if you need more detailed information from one or more specific URLs, write <|begin_url|> url1, url2, ... <|end_url|>.\n"
-        "  The system will fetch the full page content of those URLs and return it to you as <|begin_full_page|> ...full page content... <|end_full_page|>.\n\n"
-        f"You can repeat the search process multiple times if necessary. The maximum number of search attempts is limited to {MAX_SEARCH_LIMIT}.\n"
-        f"You can fetch up to {MAX_URL_FETCH} URLs for detailed information.\n\n"
-        "Once you have all the information you need, continue your reasoning.\n\n"
-        "Example:\n"
-        "Question: \"Alice David is the voice of Lara Croft in a video game developed by which company?\"\n"
-        "Assistant thinking steps:\n"
-        "- I need to find out who voices Lara Croft in the video game.\n"
-        "- Then, I need to determine which company developed that video game.\n\n"
-        "Assistant:\n"
-        "<|begin_search_query|>voice actor of Lara Croft<|end_search_query|>\n\n"
-        "(System returns search results)\n\n"
-        "Assistant:\n"
-        "<|begin_search_result|> ...search results without full page... <|end_search_result|>\n\n"
-        "Assistant thinks: The search results provide names of voice actors for Lara Croft. I need to confirm if Alice David is one of them.\n\n"
-        "Assistant:\n"
-        "<|begin_search_query|>Alice David Lara Croft voice<|end_search_query|>\n\n"
-        "(System returns search results)\n\n"
-        "Assistant:\n"
-        "<|begin_search_result|> ...search results without full page... <|end_search_result|>\n\n"
-        "Assistant thinks: The search results indicate that Alice David is the voice of Lara Croft in a specific video game. Now, I need to find out which company developed that game.\n\n"
-        "Assistant:\n"
-        "<|begin_search_query|>video game developed by Alice David Lara Croft<|end_search_query|>\n\n"
-        "(System returns search results)\n\n"
-        "Assistant:\n"
-        "<|begin_search_result|> ...search results without full page... <|end_search_result|>\n\n"
-        "Assistant thinks: The search results mention the company that developed the video game featuring Alice David as Lara Croft.\n\n"
-        "Assistant:\n"
-        "<|begin_url|>http://example.com/lara_croft_voice_actor.html, http://example.com/game_developer.html<|end_url|>\n\n" 
-        "(System returns full page content)\n\n"
-        "Assistant:\n"
-        "<|begin_full_page|> ...full page content... <|end_full_page|>\n\n"
-        "Now the assistant has enough info and can continue reasoning.\n\n"
-        "Remember:\n"
-        "- Use <|begin_search_query|> to request a web search and end with <|end_search_query|>.\n"
-        "- Use <|begin_url|> to request full page content and end with <|end_url|>.\n"
-        "- When done retrieving information, continue your reasoning.\n\n"
-    )
-
-
-def get_gpqa_rag_agent_instruction(MAX_SEARCH_LIMIT, MAX_URL_FETCH):
-    return (
-        "You are a reasoning assistant with the ability to perform web searches and retrieve webpage content to help "
-        "you answer the user’s question accurately. You have special tools:\n\n"
-        "- To perform a search: write <|begin_search_query|> your query here <|end_search_query|>.\n"
-        "Then, the system will call the web search API with your query and return the search results to you in the format <|begin_search_result|> ...search results... <|end_search_result|>.\n"
-        "  The search results will contain a list of webpages with titles, URLs, and snippets (but not full content).\n\n"
-        "- After receiving the search results, if you need more detailed information from one or more specific URLs, write <|begin_url|> url1, url2, ... <|end_url|>.\n"
-        "  The system will fetch the full page content of those URLs and return it to you as <|begin_full_page|> ...full page content... <|end_full_page|>.\n\n"
-        f"You can repeat the search process multiple times if necessary. The maximum number of search attempts is limited to {MAX_SEARCH_LIMIT}.\n"
-        f"You can fetch up to {MAX_URL_FETCH} URLs for detailed information.\n\n"
-        "Once you have all the information you need, continue your reasoning.\n\n"
-        "Example:\n"
-        "Question: \"What is the energy range of pp III neutrinos?\"\n"
-        "Assistant thinking steps:\n"
-        "- I might need to look up details about pp III neutrinos.\n\n"
-        "Assistant:\n"
-        "<|begin_search_query|>pp III neutrino energy spectrum<|end_search_query|>\n\n"
-        "(System returns search results)\n\n"
-        "Assistant:\n"
-        "<|begin_search_result|> ...search results without full page... <|end_search_result|>\n\n"
-        "Assistant thinks: The search results mention some URLs. I want full details from one of them.\n\n"
-        "Assistant:\n"
-        "<|begin_url|>http://example.com/ppIII_neutrino.html<|end_url|>\n\n" 
-        "(System returns full page content)\n\n"
-        "Assistant:\n"
-        "<|begin_full_page|> ...full page content... <|end_full_page|>\n\n"
-        "Now the assistant has enough info and can continue reasoning.\n\n"
-        "Remember:\n"
-        "- Use <|begin_search_query|> to request a web search and end with <|end_search_query|>.\n"
-        "- Use <|begin_url|> to request full page content and end with <|end_url|>.\n"
-        "- When done retrieving information, continue your reasoning.\n\n"
-    )
-
-
-def get_math_rag_agent_instruction(MAX_SEARCH_LIMIT, MAX_URL_FETCH):
-    return (
-        "You are a reasoning assistant with the ability to perform web searches and retrieve webpage content to help "
-        "you answer the user’s math-related question accurately. You have special tools:\n\n"
-        "- To perform a search: write <|begin_search_query|> your query here <|end_search_query|>.\n"
-        "Then, the system will call the web search API with your query and return the search results to you in the format <|begin_search_result|> ...search results... <|end_search_result|>.\n"
-        "  The search results will contain a list of webpages with titles, URLs, and snippets (but not full content).\n\n"
-        "- After receiving the search results, if you need more detailed information from one or more specific URLs, write <|begin_url|> url1, url2, ... <|end_url|>.\n"
-        "  The system will fetch the full page content of those URLs and return it to you as <|begin_full_page|> ...full page content... <|end_full_page|>.\n\n"
-        f"You can repeat the search process multiple times if necessary. The maximum number of search attempts is limited to {MAX_SEARCH_LIMIT}.\n"
-        f"You can fetch up to {MAX_URL_FETCH} URLs for detailed information.\n\n"
-        "Once you have all the information you need, continue your reasoning.\n\n"
-        "Example:\n"
-        "Question: \"How do you compute the integral of e^(x^2) dx?\"\n"
-        "Assistant thinking steps:\n"
-        "- I might need to look up techniques for integrating e^(x^2).\n\n"
-        "Assistant:\n"
-        "<|begin_search_query|>methods to integrate e^(x^2)<|end_search_query|>\n\n"
-        "(System returns search results)\n\n"
-        "Assistant:\n"
-        "<|begin_search_result|> ...search results without full page... <|end_search_result|>\n\n"
-        "Assistant thinks: The search results mention some URLs. I want full details from one of them.\n\n"
-        "Assistant:\n"
-        "<|begin_url|>http://example.com/integration_e_x_squared.html<|end_url|>\n\n" 
-        "(System returns full page content)\n\n"
-        "Assistant:\n"
-        "<|begin_full_page|> ...full page content... <|end_full_page|>\n\n"
-        "Now the assistant has enough info and can continue reasoning.\n\n"
-        "Remember:\n"
-        "- Use <|begin_search_query|> to request a web search and end with <|end_search_query|>.\n"
-        "- Use <|begin_url|> to request full page content and end with <|end_url|>.\n"
-        "- When done retrieving information, continue your reasoning.\n\n"
-    )
-
-
-def get_code_rag_agent_instruction(MAX_SEARCH_LIMIT, MAX_URL_FETCH):
-    return (
-        "You are a reasoning assistant with the ability to perform web searches and retrieve webpage content to help "
-        "you answer the user’s programming-related question accurately. You have special tools:\n\n"
-        "- To perform a search: write <|begin_search_query|> your query here <|end_search_query|>.\n"
-        "Then, the system will call the web search API with your query and return the search results to you in the format <|begin_search_result|> ...search results... <|end_search_result|>.\n"
-        "  The search results will contain a list of webpages with titles, URLs, and snippets (but not full content).\n\n"
-        "- After receiving the search results, if you need more detailed information from one or more specific URLs, write <|begin_url|> url1, url2, ... <|end_url|>.\n"
-        "  The system will fetch the full page content of those URLs and return it to you as <|begin_full_page|> ...full page content... <|end_full_page|>.\n\n"
-        f"You can repeat the search process multiple times if necessary. The maximum number of search attempts is limited to {MAX_SEARCH_LIMIT}.\n"
-        f"You can fetch up to {MAX_URL_FETCH} URLs for detailed information.\n\n"
-        "Once you have all the information you need, continue your reasoning.\n\n"
-        "Example:\n"
-        "Question: \"How do I implement a binary search algorithm in Python?\"\n"
-        "Assistant thinking steps:\n"
-        "- I might need to look up the implementation details of binary search in Python.\n\n"
-        "Assistant:\n"
-        "<|begin_search_query|>binary search algorithm implementation in Python<|end_search_query|>\n\n"
-        "(System returns search results)\n\n"
-        "Assistant:\n"
-        "<|begin_search_result|> ...search results without full page... <|end_search_result|>\n\n"
-        "Assistant thinks: The search results mention some URLs. I want full details from one of them.\n\n"
-        "Assistant:\n"
-        "<|begin_url|>http://example.com/python_binary_search.html<|end_url|>\n\n" 
-        "(System returns full page content)\n\n"
-        "Assistant:\n"
-        "<|begin_full_page|> ...full page content... <|end_full_page|>\n\n"
-        "Now the assistant has enough info and can continue reasoning.\n\n"
-        "Remember:\n"
-        "- Use <|begin_search_query|> to request a web search and end with <|end_search_query|>.\n"
-        "- Use <|begin_url|> to request full page content and end with <|end_url|>.\n"
-        "- When done retrieving information, continue your reasoning.\n\n"
-    )
-
-
-def get_naive_rag_instruction(question, documents):
-    return (
-        "You are a knowledgeable assistant that uses the provided documents to answer the user's question.\n\n"
-        "Question:\n"
-        f"{question}\n"
-        "Documents:\n"
-        f"{documents}\n"
-    )
-
-
 
 def get_task_instruction_openqa(question, model_name=None):
     if model_name == 'qwq':
@@ -367,63 +101,217 @@ def get_task_instruction_openqa(question, model_name=None):
         )
     return user_prompt
 
-def get_task_instruction_math(question, model_name=None):
-    if model_name == 'qwq':
-        user_prompt = (
-            'Please answer the following math question. '
-            'You should provide your final answer in the format \\boxed{YOUR_ANSWER}.\n\n'
-            f'Question:\n{question}\n\n'
-        )
-    else:
-        user_prompt = (
-            'Please answer the following math question. You should think step by step to solve it.\n\n'
-            'Provide your final answer in the format \\boxed{YOUR_ANSWER}.\n\n'
-            f'Question:\n{question}\n\n'
-        )
-    return user_prompt
-
-def get_task_instruction_multi_choice(question, model_name=None):
-    if model_name == 'qwq':
-        user_prompt = (
-            'Please answer the following multiple-choice question. '
-            'You should provide your final choice in the format \\boxed{YOUR_CHOICE}.\n\n'
-            f'Question:\n{question}\n\n'
-        )
-    elif model_name == 'llama':
-        user_prompt = (
-            'Please answer the following multiple-choice question. You should think step by step to solve it.\n\n'
-            'Provide your final choice in the format \\boxed{YOUR_CHOICE}. Your final choice should be one of the letters A, B, C, or D, DO NOT include any answer content.\n\n'
-            f'Question:\n{question}\n\n'
-        )
-    else:
-        user_prompt = (
-            'Please answer the following multiple-choice question. You should think step by step to solve it.\n\n'
-            'Provide your final choice in the format \\boxed{YOUR_CHOICE}.\n\n'
-            f'Question:\n{question}\n\n'
-        )
-    return user_prompt
-
-def get_task_instruction_code(question, question_title=None, model_name=None):
-    if model_name == 'qwq':
-        user_prompt = (
-            'Generate a correct Python program that passes all tests for the given problem. '
-            'You should provide your final code within a Python code block using triple backticks (```python\n'
-            'YOUR_CODE\n'
-            '```).\n\n'
-            f'Problem Title: {question_title}\n\n'
-            f'Problem Statement:\n{question}\n\n'
-        )
-    else:
-        user_prompt = (
-            'You will be given a question (problem specification) and will generate a correct Python program that matches the specification and passes all tests. '
-            f'You should think step by step to solve it.\n\nQuestion:\n{question}\n\n'
-            'Read the inputs from stdin solve the problem and write the answer to stdout (do not directly test on the sample inputs). Enclose your code within delimiters as follows.\n\n'
-            "```python\n# YOUR CODE HERE\n```\n\n"
-        )
-    return user_prompt
-
 def get_react_examples():
     user_prompt = (
-        "\nQuestion: What is the elevation range for the area that the eastern sector of the Colorado orogeny extends into?\nThought 1: I need to search Colorado orogeny, find the area that the eastern sector of the Colorado orogeny extends into, then find the elevation range of the area.\nAction 1: Search[Colorado orogeny]\nObservation 1: The Colorado orogeny was an episode of mountain building (an orogeny) in Colorado and surrounding areas.\nThought 2: It does not mention the eastern sector. So I need to look up eastern sector.\nAction 2: Lookup[eastern sector]\nObservation 2: (Result 1 / 1) The eastern sector extends into the High Plains and is called the Central Plains orogeny.\nThought 3: The eastern sector of Colorado orogeny extends into the High Plains. So I need to search High Plains and find its elevation range.\nAction 3: Search[High Plains]\nObservation 3: High Plains refers to one of two distinct land regions:\nThought 4: I need to instead search High Plains (United States).\nAction 4: Search[High Plains (United States)]\nObservation 4: The High Plains are a subregion of the Great Plains. From east to west, the High Plains rise in elevation from around 1,800 to 7,000 ft (550 to 2,130 m).[3]\nThought 5: High Plains rise in elevation from around 1,800 to 7,000 ft, so the answer is 1,800 to 7,000 ft.\nAction 5: Finish[1,800 to 7,000 ft]\nQuestion: Musician and satirist Allie Goertz wrote a song about the \"The Simpsons\" character Milhouse, who Matt Groening named after who?\nThought 1: The question simplifies to \"The Simpsons\" character Milhouse is named after who. I only need to search Milhouse and find who it is named after.\nAction 1: Search[Milhouse]\nObservation 1: Milhouse Mussolini Van Houten is a recurring character in the Fox animated television series The Simpsons voiced by Pamela Hayden and created by Matt Groening.\nThought 2: The paragraph does not tell who Milhouse is named after, maybe I can look up \"named after\".\nAction 2: Lookup[named after]\nObservation 2: (Result 1 / 1) Milhouse was named after U.S. president Richard Nixon, whose middle name was Milhous. \nThought 3: Milhouse was named after U.S. president Richard Nixon, so the answer is Richard Nixon.\nAction 3: Finish[Richard Nixon]\nQuestion: Which documentary is about Finnish rock groups, Adam Clayton Powell or The Saimaa Gesture?\nThought 1: I need to search Adam Clayton Powell and The Saimaa Gesture, and find which documentary is about Finnish rock groups.\nAction 1: Search[Adam Clayton Powell]\nObservation 1: Could not find [Adam Clayton Powell]. Similar: ['Adam Clayton Powell III', 'Seventh Avenue (Manhattan)', 'Adam Clayton Powell Jr. State Office Building', 'Isabel Washington Powell', 'Adam Powell', 'Adam Clayton Powell (film)', 'Giancarlo Esposito'].\nThought 2: To find the documentary, I can search Adam Clayton Powell (film).\nAction 2: Search[Adam Clayton Powell (film)]\nObservation 2: Adam Clayton Powell is a 1989 American documentary film directed by Richard Kilberg.\nThe film is about the rise and fall of influential African-American politician Adam Clayton Powell Jr.[3][4] It was later aired as part of the PBS series The American Experience.\nThought 3: Adam Clayton Powell (film) is a documentary about an African-American politician, not Finnish rock groups. So the documentary about Finnish rock groups must instead be The Saimaa Gesture.\nAction 3: Finish[The Saimaa Gesture]\nQuestion: What profession does Nicholas Ray and Elia Kazan have in common?\nThought 1: I need to search Nicholas Ray and Elia Kazan, find their professions, then find the profession they have in common.\nAction 1: Search[Nicholas Ray]\nObservation 1: Nicholas Ray (born Raymond Nicholas Kienzle Jr., August 7, 1911 \u2013 June 16, 1979) was an American film director, screenwriter, and actor best known for the 1955 film Rebel Without a Cause.\nThought 2: Professions of Nicholas Ray are director, screenwriter, and actor. I need to search Elia Kazan next and find his professions.\nAction 2: Search[Elia Kazan]\nObservation 2: Elia Kazan was an American film and theatre director, producer, screenwriter and actor.\nThought 3: Professions of Elia Kazan are director, producer, screenwriter, and actor. So profession Nicholas Ray and Elia Kazan have in common is director, screenwriter, and actor.\nAction 3: Finish[director, screenwriter, actor]\nQuestion: Which magazine was started first Arthur's Magazine or First for Women?\nThought 1: I need to search Arthur's Magazine and First for Women, and find which was started first.\nAction 1: Search[Arthur's Magazine]\nObservation 1: Arthur's Magazine (1844-\u0080\u00931846) was an American literary periodical published in Philadelphia in the 19th century. \nThought 2: Arthur's Magazine was started in 1844. I need to search First for Women next.\nAction 2: Search[First for Women]\nObservation 2: First for Women is a woman's magazine published by Bauer Media Group in the USA.[1] The magazine was started in 1989. \nThought 3: First for Women was started in 1989. 1844 (Arthur's Magazine) < 1989 (First for Women), so Arthur's Magazine was started first.\nAction 3: Finish[Arthur's Magazine]\nQuestion: Were Pavel Urysohn and Leonid Levin known for the same type of work?\nThought 1: I need to search Pavel Urysohn and Leonid Levin, find their types of work, then find if they are the same.\nAction 1: Search[Pavel Urysohn]\nObservation 1: Pavel Samuilovich Urysohn (February 3, 1898 \u00e2\u0080\u0093 August 17, 1924) was a Soviet mathematician who is best known for his contributions in dimension theory.\nThought 2: Pavel Urysohn is a mathematician. I need to search Leonid Levin next and find its type of work.\nAction 2: Search[Leonid Levin]\nObservation 2: Leonid Anatolievich Levin is a Soviet-American mathematician and computer scientist. \nThought 3: Leonid Levin is a mathematician and computer scientist. So Pavel Urysohn and Leonid Levin have the same type of work. \nAction 3: Finish[yes]\n"
+        "Question: Were Pavel Urysohn and Leonid Levin known for the same type of work?\nThought 1: I need to search Pavel Urysohn and Leonid Levin, find their types of work, then find if they are the same.\nAction 1: Search[Pavel Urysohn]\nObservation 1: Pavel Samuilovich Urysohn (February 3, 1898 \u00e2\u0080\u0093 August 17, 1924) was a Soviet mathematician who is best known for his contributions in dimension theory.\nThought 2: Pavel Urysohn is a mathematician. I need to search Leonid Levin next and find its type of work.\nAction 2: Search[Leonid Levin]\nObservation 2: Leonid Anatolievich Levin is a Soviet-American mathematician and computer scientist. \nThought 3: Leonid Levin is a mathematician and computer scientist. So Pavel Urysohn and Leonid Levin have the same type of work. \nAction 3: Finish[yes]\n"
     )
+    return user_prompt
+
+def get_subqueries_qwen3_8b():
+    user_prompt = (
+        '''
+        Your goal is to answer or decompose the 'Query' using the provided 'Query_context' and 'Parent_query'.
+
+        1.  **Context Assessment**: Determine if the 'Query_context' is helpful for the 'Query'.
+            * If not helpful, ignore it.
+            * If helpful, use its information.
+        2. **Parent Query**: The 'Parent_query' is the query that led to the current 'Query'. It may provide additional constraints.
+        3.  **Output Determination**:
+            * **Direct Answer**: If the 'Query_context' allows for a direct answer to the 'Query' without decomposition, output in the format: `{{\"answer\": \"...\"}}`.If you are not 100% sure the answer is correct, please do not answer.
+            * **Decomposition**: If the 'Query' can't answer directly and the 'Query' requires decomposition into two logically related sub-queries to deduce the answer, output in the format: `{{\"subquery1\": \"...\", \"subquery2\": \"...\"}}`. These two sub-queries must logically lead to the original query's answer.
+            * **No Answer**: If the 'Query_context' does not provide any helpful information for the 'Query' and there is no need to decompose further, output in the format: `{{\"subquery1\": \"A key entity in the Query\", \"subquery2\": \"A key entity in the Query\"}}`.
+        
+        Please output your final response strictly in accordance with the above JSON format after thinking about it.
+
+
+        Example 1 (Direct Answer):
+        Query_context:  Doc 1:  First for Women is a woman's magazine published by Bauer Media Group in the USA.The magazine was started in 1989.It is based in Englewood Cliffs, New Jersey.In 2011 the circulation of the magazine was 1,310,696 copies. 
+                        Doc 2: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.Edited by T.S. Arthur, it featured work by Edgar A. Poe, J.H. Ingraham, Sarah Josepha Hale, Thomas G. Spear, and others.In May 1846 it was merged into "Godey's Lady's Book".\n
+        Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+        Query: When was the Arthur's Magazine started?
+        Output: {{\"answer\": \"1844\"}}
+
+        Example 2 (Decomposition):
+        Query_context:  Doc 1:A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.
+                        Doc 2:\"A Hole in My Heart\"\nA Hole in My Heart A Hole in My Heart () is a 2004 Swedish experimental drama film written and directed by Lukas Moodysson, starring Thorsten Flinck, Sanna Bråding, Björn Almroth and Goran Marjanovic. The story revolves around a man who makes a pornographic film in his apartment with a friend and an attention-seeking starlet, while his teenage son stays in his room and listens to ambient noise music. The film is notable for its explicit imagery, including close-ups of vaginal reconstruction surgery, an anal sex scene without the use of lubrication, a masturbation scene with a toothbrush.
+                        Doc 3:\"A Hole in My Heart\"\na 41% approval percentage based on 17 reviews at Rotten Tomatoes. A Hole in My Heart A Hole in My Heart () is a 2004 Swedish experimental drama film written and directed by Lukas Moodysson, starring Thorsten Flinck, Sanna Bråding, Björn Almroth and Goran Marjanovic. The story revolves around a man who makes a pornographic film in his apartment with a friend and an attention-seeking starlet, while his teenage son stays in his room and listens to ambient noise music. The film is notable for its explicit imagery, including close-ups of vaginal reconstruction surgery, an anal sex scene without.
+        Query: What is the birhday of the director of A Flame In My Heart?
+        Parent_query of the Query:  Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+        Output: {{\"subquery1\": \"Who is Alain Tanner?\", \"subquery2\": \"What is the birhday of Alain Tanner?\"}}
+
+        Example 3 (No Answer):
+        Query_context:  Doc 1:"B.C. Butcher" B.C. Butcher B.C. Butcher is a 2016 American horror comedy film directed by 17-year-old Kansas Bowling about a tribe of cavewomen being stalked by a prehistoric monster. It has been dubbed as \"\"the first prehistoric slasher film\"\". It was released in January 2016 by Troma Entertainment. A tribe of cavewomen sacrifice one of their members after it is revealed she is having an affair with the tribe leader's man (Kato Kaelin). They leave her body in the wilderness and it is discovered by a prehistoric beast who falls in love with the dead cavewoman and vows to avenge her death.
+                        Doc 2:\"Night Warning\"\nMovies of the 1980s\"\", John Kenneth Muir rated it 3.5/4 stars. Muir called it \"\"a true gem of the decade\"\" and \"\"the 1980s most twisted, bizarre cinematic vision of motherhood\"\". Night Warning Night Warning (also known as Butcher, Baker, Nightmare Maker) is a 1982 American exploitation horror film directed by William Asher, and starring Susan Tyrrell, Jimmy McNichol, Julia Duffy, and Bo Svenson. Framed as a contemporary Oedipus tale, the plot focuses on a teenager who, raised by his neurotic aunt, finds himself at the center of a murder investigation after she stabs a man to death in their house.
+                        Doc 3:\"The Butcher Boy (1997 film)\"\nThe Butcher Boy (1997 film) The Butcher Boy is a 1997 Irish-American tragicomic drama film adapted to film by Neil Jordan and Patrick McCabe from McCabe's 1992 novel of the same name. Set in the early 1960s, \"\"The Butcher Boy\"\" is about Francie Brady (Eamonn Owens), a 12-year-old boy who retreats into a violent fantasy world to escape the reality of his dysfunctional family; as his circumstances worsen, his sanity deteriorates and he begins acting out, with increasing brutality. The film won the Silver Bear for Best Director at the 48th Berlin International Film Festival in 1998 and a Special.
+        Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+        Query: Who is the director of Butcher, Baker, Nightmare Maker?
+        Output: {{\"subquery1\": \"Butcher, Baker, Nightmare Maker\", \"subquery2\": \"Direct of Butcher, Baker, Nightmare Maker\"}}
+
+        Query_context: {context}
+        Parent_query of the Query: {parent_query}
+        Query: {query}
+        Output:
+        '''
+    )
+    return user_prompt
+
+
+def get_subqueries_qwen3_8b_first():
+    user_prompt = (
+        '''
+        Your goal is to decompose the 'Query' using the provided 'Query_context'.
+
+        1.  **Context Assessment**: Determine if the 'Query_context' is helpful for the 'Query'.
+            * If not helpful, ignore it.
+            * If helpful, use its information.
+        2.  **Output Determination**:
+            * **Decomposition**: Please decompose the 'Query' into two logically related sub-queries to deduce the answer, output in the format: `{{\"subquery1\": \"...\", \"subquery2\": \"...\"}}`. These two sub-queries must logically lead to the original query's answer.
+
+        Please output your final response strictly in accordance with the above JSON format after thinking about it.
+
+        Example (Decomposition):
+        Query_context:  Doc 1:A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.
+                        Doc 2:\"A Hole in My Heart\"\nA Hole in My Heart A Hole in My Heart () is a 2004 Swedish experimental drama film written and directed by Lukas Moodysson, starring Thorsten Flinck, Sanna Bråding, Björn Almroth and Goran Marjanovic. The story revolves around a man who makes a pornographic film in his apartment with a friend and an attention-seeking starlet, while his teenage son stays in his room and listens to ambient noise music. The film is notable for its explicit imagery, including close-ups of vaginal reconstruction surgery, an anal sex scene without the use of lubrication, a masturbation scene with a toothbrush.
+                        Doc 3:\"A Hole in My Heart\"\na 41% approval percentage based on 17 reviews at Rotten Tomatoes. A Hole in My Heart A Hole in My Heart () is a 2004 Swedish experimental drama film written and directed by Lukas Moodysson, starring Thorsten Flinck, Sanna Bråding, Björn Almroth and Goran Marjanovic. The story revolves around a man who makes a pornographic film in his apartment with a friend and an attention-seeking starlet, while his teenage son stays in his room and listens to ambient noise music. The film is notable for its explicit imagery, including close-ups of vaginal reconstruction surgery, an anal sex scene without.
+        Query: What is the birhday of the director of A Flame In My Heart or Butcher?
+        Output: {{\"subquery1\": \"Who is Alain Tanner?\", \"subquery2\": \"What is the birhday of  Alain Tanner?\"}}
+
+        Query_context: {context}
+        Query: {query}
+        Output:
+        '''
+    )
+
+    return user_prompt
+
+
+def get_final_answer_qwen3_8b():
+    user_prompt = (
+            '''
+            Please answer the following question.
+            You can use the information in the inference tree below.If there are logical errors in the inference tree, please correct them based on your knowledge or do not use this wrong information as the basis for your response.
+            Your answer should be formatted as \\boxed{{YOUR_ANSWER}}. 
+
+            
+            ## Inference Tree
+            {context}
+
+            ## Question
+            {question}'''
+        )
+
+    return user_prompt
+
+
+
+def get_subqueries_llama3_8b():
+    user_prompt = (
+        '''
+Your task is to answer or decompose the 'Query' using the provided 'Query_context' and 'Parent_query'.
+
+**Instructions:**
+
+1.  **Analyze Context & Parent Query**: Evaluate if 'Query_context' and 'Parent_query' are helpful for the 'Query'.
+2.  **Determine Output Type**:
+    * **Direct Answer**: If 'Query_context' contains the **exact and verifiable answer** to the 'Query' (without needing decomposition), output: {{"answer": "..."}}. **Only answer if you 100% certain.**
+    * **Decomposition**: If the 'Query' cannot be directly answered and requires breaking down into two **logically related sub-queries** that together **lead to the original query's answer**, output: {{"subquery1": "...", "subquery2": "..."}}.
+    * **No Answer**: If 'Query_context' is **unhelpful** and decomposition is **not necessary or possible** (e.g., no key entities to decompose), output: {{"subquery1": "A key entity in the Query", "subquery2": "A key entity in the Query"}}.
+3.  **Rules To Follow**: THE SUBQUERIES OR ANSWER MUST BE IN JSON FORMAT.Your output must be ONLY a JSON object, with no other introductory or explanatory text.The value of "subquery1", "subquery2" and "answer" in the json format MUST be a STRING.
+4.  **Important Note**: Your JSON output must be wrapped in a Markdown code block like this:
+```json
+{{"subquery1": "...","subquery2": "..."}}
+```
+```json
+{{"answer": "..."}}
+```
+
+**Example 1 (Direct Answer):**
+
+Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"answer": "1844"}}
+```
+
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?"}}
+```
+
+**Example 3 (No Answer):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"subquery1": "Butcher, Baker, Nightmare Maker", "subquery2": "Direct of Butcher, Baker, Nightmare Maker"}}
+```
+
+Query_context: {context}\n
+Parent_query of the Query: {parent_query}\n
+Query: {query}\n
+Output:
+        '''
+    )
+    return user_prompt
+
+
+def get_subqueries_llama3_8b_first():
+    user_prompt = (
+        '''
+        Your task is to decompose the 'Query' into sub-queries. Refer to the 'Query_context' as needed.
+
+        **Instructions:**
+        1.  **Decompose Query**: Decompose the 'Query' into two **logically related** sub-queries. Both sub-queries must collectively **lead to the original query's answer**.
+        2.  **Output Format**: Output your final answer strictly in the following JSON format: {{"subquery1": "...", "subquery2": "..."}}.
+        3.  **Rules To Follow**: THE SUBQUERIES MUST BE IN JSON FORMAT.Your output must be ONLY a JSON object, with no other introductory or explanatory text.The value of "subquery1" and "subquery2" in the json format MUST be a STRING.
+        4.  **Important Note**: Your JSON output must be wrapped in a Markdown code block like this:
+        ```json
+        {{"subquery1": "...","subquery2": "..."}}
+        ```
+
+        **Example:**
+        Query_context:...
+        Query: Are director of film Move (1970 Film) and director of film Méditerranée (1963 Film) from the same country?
+        Output: 
+        ``` json 
+        {{\"subquery1\": \"Who is the director of Move (1970 Film)?\", \"subquery2\": \"Who is the director of Méditerranée (1963 Film)\"}}
+        ```
+
+        **Your Task:**
+        Query_context: {context}
+        Query: {query}
+        Output:
+        '''
+        
+    )
+
+    return user_prompt
+
+
+def get_final_answer_llama3_8b():
+    user_prompt = (
+            '''
+            ## Inference Tree
+            {context}
+
+            Please answer the following question.
+            You can use the helpful information in the above Inference Tree.
+            Your final answer must be formatted as \\boxed{{YOUR_ANSWER}}.And YOUR_ANSWER should be a NON-SENTENTIAL answer.
+            For example, Question: What is the capital of France? Answer: \\boxed{{Paris}}.
+
+            ## Question
+            {question}
+
+            Answer: 
+
+            '''
+        )
+
     return user_prompt

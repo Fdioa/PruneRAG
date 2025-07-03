@@ -58,8 +58,7 @@ def load_corpus(corpus_path: str):
     corpus = datasets.load_dataset(
             'json', 
             data_files=corpus_path,
-            split="train",
-            streaming=True)
+            split="train")
     return corpus
 
 
@@ -203,9 +202,10 @@ class Index_Builder:
 
         for start_idx in tqdm(range(0, len(self.corpus), self.batch_size), desc='Inference Embeddings:'):
 
-            batch_data_title = self.corpus[start_idx:start_idx+self.batch_size]['title']
-            batch_data_text = self.corpus[start_idx:start_idx+self.batch_size]['text']
-            batch_data = ['"' + title + '"\n' + text for title, text in zip(batch_data_title, batch_data_text)]
+            # batch_data_title = self.corpus[start_idx:start_idx+self.batch_size]['title']
+            # batch_data_text = self.corpus[start_idx:start_idx+self.batch_size]['text']
+            # batch_data = ['"' + title + '"\n' + text for title, text in zip(batch_data_title, batch_data_text)]
+            batch_data = self.corpus[start_idx:start_idx+self.batch_size]['contents']
 
             if self.retrieval_method == "e5":
                 batch_data = [f"passage: {doc}" for doc in batch_data]
@@ -353,9 +353,9 @@ def main():
 
 
 if __name__ == "__main__":
-    # main()
-    corpus = load_corpus("corpus/wiki-18.jsonl.gz")
-    print(next(iter(corpus)))
+    main()
+    # corpus = load_corpus("corpus/wiki-18.jsonl.gz")
+    # print(next(iter(corpus)))
 
 
 

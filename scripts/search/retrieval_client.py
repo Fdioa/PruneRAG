@@ -67,15 +67,17 @@ class RetrievalClient:
             response = requests.post(
                 url=endpoint,
                 json=request.model_dump(),
-                timeout=timeout,
+                # timeout=timeout,
                 headers=headers
             )
 
             print(response.raise_for_status())
             print(response.status_code)
+            res_json = self._parse_response(response.json())
+            # print(res_json)
 
             
-            return self._parse_response(response.json())
+            return res_json
             
         except requests.exceptions.RequestException as e:
             logger.error(f"检索请求失败: {str(e)}")

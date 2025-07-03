@@ -1,12 +1,12 @@
 
-corpus_file=/your/corpus/jsonl/file # jsonl
-save_dir=/the/path/to/save/index
-retriever_name=e5 # this is for indexing naming
-retriever_model=intfloat/e5-base-v2
+corpus_file=/workspace/Search-R1/corpus/wiki-18.jsonl # jsonl
+save_dir=/workspace/index/qwen3_index
+retriever_name=qwen3 # this is for indexing naming
+retriever_model=/workspace/Search-R1/models/qwen3-embedding-0.6b
 
 # change faiss_type to HNSW32/64/128 for ANN indexing
 # change retriever_name to bm25 for BM25 indexing
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python index_builder.py \
+CUDA_VISIBLE_DEVICES=0,1 python ./scripts/search/index_builder.py \
     --retrieval_method $retriever_name \
     --model_path $retriever_model \
     --corpus_path $corpus_file \

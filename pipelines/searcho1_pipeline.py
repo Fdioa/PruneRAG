@@ -9,24 +9,16 @@ import torch
 import json ,re, argparse
 from datetime import datetime
 import os,sys
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.data_loader import DatasetLoader
 from scripts.evaluater import EvaluationStrategyFactory,EvaluationUtils
 from scripts.seed import setup_seed
 from scripts.search.retrieval_client import RetrievalClient, QueryRequest
 
 from prompts import (
-    get_gpqa_search_o1_instruction, 
-    get_math_search_o1_instruction, 
-    get_code_search_o1_instruction, 
     get_singleqa_search_o1_instruction, 
     get_multiqa_search_o1_instruction, 
     get_webpage_to_reasonchain_instruction,
     get_task_instruction_openqa, 
-    get_task_instruction_math, 
-    get_task_instruction_multi_choice, 
-    get_task_instruction_code, 
 )
 
 logger = logging.getLogger(__name__)
@@ -36,6 +28,9 @@ BEGIN_SEARCH_QUERY = "<|begin_search_query|>"
 END_SEARCH_QUERY = "<|end_search_query|>"
 BEGIN_SEARCH_RESULT = "<|begin_search_result|>"
 END_SEARCH_RESULT = "<|end_search_result|>"
+
+MAX_SEARCH_LIMIT = 10
+MAX_TURN = 15
 
 
 
@@ -69,7 +64,7 @@ def parse_args():
         '--dataset_name',
         type=str,
         required=True,
-        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle','example'],
+        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle','example','popqa','fever'],
         help="数据集名称"
     )
 
@@ -131,7 +126,7 @@ def parse_args():
     parser.add_argument(
         '--max_tokens',
         type=int,
-        default=10240,
+        default=20480,
         help="生成的最大token数"
     )
     parser.add_argument(
@@ -173,16 +168,19 @@ class Config:
                  topk: int = 3,
                  max_context_length: int = 4096,
                  max_depth: int = 3,
-                 max_search_limit: int = 5,
-                 max_turn: int = 3,
-                 max_tokens: int = 2048,
+                 max_search_limit: int = 7,
+                 max_turn: int = 15,
+                 max_tokens: int = 20480,
                  temperature: float = 0.7,
                  top_p: float = 0.8,
                  top_k: int = 20,
                  repetition_penalty: float = 1.05,
                  output_dir: str = "./outputs",
-                 log_dir: str = "./logs"):
+                 log_dir: str = "./logs",
+                 seed: int = 3407):
         
+        ##设置随机数种子
+        self.seed = seed
         ##模型和数据的路径
         self.model_path = model_path
         self.model_name = os.path.basename(model_path)
@@ -221,10 +219,11 @@ class Generator:
         self.config = config
         self.llm = LLM(
             model=config.model_path,
+            # pipeline_parallel_size = torch.cuda.device_count(),
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=0.90,
-            # max_model_len = 70000
-            )
+            seed=config.seed)
+        
         self.tokenizer = AutoTokenizer.from_pretrained(
             config.model_path,
             padding_side="left",
@@ -238,6 +237,11 @@ class Generator:
 
         self.MAX_SEARCH_LIMIT = self.config.max_search_limit
         self.MAX_TURN = self.config.max_turn
+
+        if 'qwen' in self.config.model_name:
+            self.config.repetition_penalty = 1.05
+        elif 'llama' in self.config.model_name:
+            self.config.repetition_penalty = 1.0
 
     def prepare_prompts(self,filtered_data, dataset_name, model_path, MAX_SEARCH_LIMIT, subset_num=-1):
         
@@ -255,31 +259,10 @@ class Generator:
                 else:
                     user_prompt = get_task_instruction_openqa(question)
 
-            elif dataset_name in ['math500', 'aime', 'amc']:
-                instruction = get_math_search_o1_instruction(MAX_SEARCH_LIMIT)
-                if 'qwq' in model_path.lower():
-                    user_prompt = get_task_instruction_math(question, model_name='qwq')
-                else:
-                    user_prompt = get_task_instruction_math(question)
-
-            elif dataset_name == 'gpqa':
-                instruction = get_gpqa_search_o1_instruction(MAX_SEARCH_LIMIT)
-                if 'qwq' in model_path.lower():
-                    user_prompt = get_task_instruction_multi_choice(question, model_name='qwq')
-                elif 'llama' in model_path.lower():
-                    user_prompt = get_task_instruction_multi_choice(question, model_name='llama')
-                else:
-                    user_prompt = get_task_instruction_multi_choice(question)
-
-            elif dataset_name == 'livecode':
-                instruction = get_code_search_o1_instruction(MAX_SEARCH_LIMIT)
-                question_title = item.get('question_title', '')
-                if 'qwq' in model_path.lower():
-                    user_prompt = get_task_instruction_code(question, question_title=question_title, model_name='qwq')
-                else:
-                    user_prompt = get_task_instruction_code(question)
             else:
-                user_prompt = ""  # Default to empty if dataset not matched
+                instruction = get_multiqa_search_o1_instruction(MAX_SEARCH_LIMIT)
+                user_prompt = get_task_instruction_openqa(question, model_name='qwq')
+                # user_prompt = ""  # Default to empty if dataset not matched
 
             prompt = [{"role": "user", "content": instruction + user_prompt}]
             prompt = self.tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
@@ -308,26 +291,27 @@ class Generator:
         request = QueryRequest(queries=queries, topk=self.config.topk)
         response = self.retrieval_client.query(request)
         context_map = {}
-        for idx, results in enumerate(response.results):
-            context = "\n".join([f"[Doc {i+1}] {res.document.contents}" for i, res in enumerate(results)])
+        for idx, result in enumerate(response.results):
+            context = "\n".join([f"[Doc {i+1}] {res.document.contents}" for i, res in enumerate(result)])
             context_map[idx] = context
         return context_map
 
     def _parallel_retrieve(self, subqueries: List[str]) -> Dict[int, str]:
-        context_map = {}
+        # 直接尝试调用 _retrieve_context 并返回其结果
         try:
-            batch_results = self._retrieve_context(subqueries)
-            for idx, context in batch_results.items():
-                context_map[idx] = context
+            return self._retrieve_context(subqueries)
         except Exception as exc:
             logger.error(f'批量检索失败: {exc}')
-        return context_map
+            # 发生错误时返回一个空字典，符合原函数的行为
+            return {}
 
     def parameters_adjust(self, dataset_name):
+
+        global MAX_SEARCH_LIMIT, MAX_TURN
         if dataset_name in ['nq', 'triviaqa', 'hotpotqa', 'musique', 'bamboogle', '2wiki', 'medmcqa', 'pubhealth']:
-            MAX_SEARCH_LIMIT = 5
+            MAX_SEARCH_LIMIT = 7
             if dataset_name in ['hotpotqa', 'musique', 'bamboogle', '2wiki']:
-                MAX_SEARCH_LIMIT = 5
+                MAX_SEARCH_LIMIT = 7
                 MAX_TURN = 3
             self.config.top_k = 3
             self.config.max_doc_len = 4096
@@ -339,6 +323,7 @@ class Generator:
         prompts = [s['prompt'] for s in sequences]
         sampling_params = SamplingParams(
             max_tokens=self.config.max_tokens,
+            # temperature=0,
             temperature=self.config.temperature,
             top_p=self.config.top_p,
             top_k=self.config.top_k,
@@ -352,10 +337,17 @@ class Generator:
         # Function to extract text between two tags
     
     def extract_between(self, text: str, start_tag: str, end_tag: str) -> Optional[str]:
-        pattern = re.escape(start_tag) + r"(.*?)" + re.escape(end_tag)
+        start_tag = "|begin_search_query|"
+        end_tag = "|end_search_query|"
+
+        escaped_start = re.escape(start_tag)
+        escaped_end = re.escape(end_tag)
+
+        pattern = rf"(<{escaped_start}\s*>?|<{escaped_start})\s*(.*?)\s*({escaped_end}>|<?\s*{escaped_end}>)"
+        # pattern = re.escape(start_tag) + r"(.*?)" + re.escape(end_tag)
         matches = re.findall(pattern, text, flags=re.DOTALL)
         if matches:
-            return matches[-1].strip()
+            return matches[-1][1].strip()
         return None
 
     def replace_recent_steps(self, origin_str, replace_str):
@@ -450,11 +442,12 @@ class Generator:
         output = self.llm.generate(
             prompts,
             sampling_params=SamplingParams(
-            max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
-            top_p=self.config.top_p,
-            top_k=self.config.top_k,
-            repetition_penalty=self.config.repetition_penalty,
+                max_tokens=self.config.max_tokens,
+                # temperature=0,
+                temperature=self.config.temperature,
+                top_p=self.config.top_p,
+                top_k=self.config.top_k,
+                repetition_penalty=self.config.repetition_penalty
             )
         )
 
@@ -522,11 +515,13 @@ class Generator:
                                 print(f"Executed search for query: \"{search_query}\"")
                             except Exception as e:
                                 print(f"Error during search query '{search_query}': {e}")
-                                results = {}
+                                results = {}  
 
                             # Extract relevant information from Bing search results
                             
-                            seq['relevant_info'] = results
+
+                            result = results.get(0, "")
+                            seq['relevant_info'] = result 
 
                             all_reasoning_steps = seq['output'] # 从序列中获取原始推理输出
                             all_reasoning_steps = all_reasoning_steps.replace('\n\n', '\n').split("\n") # 规范化换行符并拆分为列表
@@ -549,11 +544,11 @@ class Generator:
                             truncated_prev_reasoning = truncated_prev_reasoning.strip('\n') # 去除末尾空行
 
                             # Collect parameters for batch processing
-                            batch_relevant_info.append(results)
+                            batch_relevant_info.append(result)
                             batch_original_questions.append(seq['item']['Question'])
                             batch_prev_reasonings.append(truncated_prev_reasoning)
                             batch_search_queries.append(search_query)
-                            batch_documents.append(results)
+                            batch_documents.append(result)
                             batch_sequences.append(seq)
 
                             # Update search count and executed queries
@@ -627,7 +622,7 @@ class Generator:
 
         # 保存评估结果
         result_path = self.config.output_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"
-        strategy.save_results(result_path,"searcho1", self.config.split,total_time, apply_backoff=False)
+        strategy.save_results(result_path,"searcho1", self.config.split,total_time,self.start_time, apply_backoff=False)
         
         return [output.outputs[0].text for output in outputs]
     
@@ -635,12 +630,36 @@ class Generator:
 
 if __name__ == "__main__":
 
+    print("Starting search-o1 pipeline...\n Time:", datetime.now())
+
 
     # 设置随机数种子
     setup_seed(3407)
     # 解析命令行参数
     args = parse_args()
     # 测试用例
+
+
+    # config = Config(
+    #     model_path="/workspace/Search-o1/models/qwq_awq",
+    #     data_path="/workspace/Search-R1/config/dataset_paths.json",
+    #     retrieval_url="http://localhost:8000",
+    #     dataset_name="example",
+    #     split="test",
+    #     topk=3,
+    #     max_depth=3,
+    #     max_search_limit=3,
+    #     max_turn=3,
+    #     max_tokens=10240,
+    #     temperature=0.7,
+    #     top_p=0.8,
+    #     top_k=20,
+    #     repetition_penalty=1.05,
+    #     max_context_length=4096,
+    #     output_dir="./output/example",
+    #     log_dir="./logs/example"
+
+    # )
     config = Config(
         model_path=args.model_path,
         data_path=args.data_path,

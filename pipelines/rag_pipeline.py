@@ -1,15 +1,12 @@
 import logging
 from typing import List, Dict, Any
-
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
-
 import torch
 import concurrent.futures
 import json ,re, argparse
 from datetime import datetime
 import os,sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.data_loader import DatasetLoader
 from scripts.evaluater import EvaluationStrategyFactory
 from scripts.seed import setup_seed
@@ -48,7 +45,7 @@ def parse_args():
         '--dataset_name',
         type=str,
         required=True,
-        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle','example'],
+        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle','example','popqa','fever'],
         help="数据集名称"
     )
 
@@ -129,7 +126,7 @@ def parse_args():
 
 class Config:
     def __init__(self, 
-                 model_path: str = "/workspace/Search-R1/models/llama-3.1-8b-instruct",
+                 model_path: str = "/workspace/Search-R1/models",
                  data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
                  retrieval_url: str = "http://localhost:8000",
                  dataset_name: str = "2wiki",
@@ -142,7 +139,9 @@ class Config:
                  top_p: float = 0.8,
                  repetition_penalty: float = 1.05,
                  output_dir: str = "./output",
-                 log_dir: str = "./logs"):
+                 log_dir: str = "./logs",
+                 seed: int = 3407):
+        self.seed = seed
         self.model_path = model_path
         self.model_name = os.path.basename(model_path)
         self.data_path = data_path
@@ -177,8 +176,7 @@ class Generator:
             model=config.model_path,
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=0.90,
-            # max_model_len = 70000
-            )
+            seed = config.seed)
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             config.model_path,
@@ -196,7 +194,7 @@ class Generator:
         self.prompt_template = (
             "Answer the following question:\n"
             "You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.\n"
-            "You can use the following documents to help you answer the question"
+            "You can use the following documents to help you answer the question.\n"
             "Documents: {context}\n\n"
             "Question: {question}\n\n"
         )
@@ -215,14 +213,13 @@ class Generator:
         return context_map
 
     def _parallel_retrieve(self, subqueries: List[str]) -> Dict[int, str]:
-        context_map = {}
+        # 直接尝试调用 _retrieve_context 并返回其结果
         try:
-            batch_results = self._retrieve_context(subqueries)
-            for idx, context in batch_results.items():
-                context_map[idx] = context
+            return self._retrieve_context(subqueries)
         except Exception as exc:
             logger.error(f'批量检索失败: {exc}')
-        return context_map
+            # 发生错误时返回一个空字典，符合原函数的行为
+            return {}
 
     def _process_nodes_context(self, nodes: List[ContextTreeNode]):
         # 收集所有子查询
@@ -265,10 +262,11 @@ class Generator:
         
         params = SamplingParams(
             max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
-            top_p=self.config.top_p,
-            top_k=self.config.top_k,
-            repetition_penalty=self.config.repetition_penalty,
+            temperature=0,
+            # temperature=self.config.temperature,
+            # top_p=self.config.top_p,
+            # top_k=self.config.top_k,
+            # repetition_penalty=self.config.repetition_penalty,
         )
 
         outputs = self.llm.generate(prompts, params)
@@ -310,7 +308,7 @@ class Generator:
 
         # 保存评估结果
         result_path = self.config.output_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"
-        strategy.save_results(result_path,"rag", self.config.split,total_time, apply_backoff=False)
+        strategy.save_results(result_path,"rag", self.config.split,total_time,self.start_time, apply_backoff=False)
         
         return [output.outputs[0].text for output in outputs]
     
@@ -335,6 +333,8 @@ class Generator:
         return nodes_list
 
 if __name__ == "__main__":
+
+    print("Starting rag pipeline...\n Time:", datetime.now())
 
     setup_seed(3407)
     args = parse_args()

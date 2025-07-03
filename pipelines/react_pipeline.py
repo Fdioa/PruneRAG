@@ -49,7 +49,7 @@ def parse_args():
         '--dataset_name',
         type=str,
         required=True,
-        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle','example'],
+        choices=['gpqa', 'math500', 'aime', 'amc', 'livecode', 'nq', 'triviaqa', 'hotpotqa', '2wiki', 'musique', 'bamboogle','example','popqa','fever'],
         help="数据集名称"
     )
 
@@ -93,33 +93,33 @@ def parse_args():
     parser.add_argument(
         '--max_tokens',
         type=int,
-        default=10240,
+        default=100,
         help="生成的最大token数"
     )
     parser.add_argument(
         '--temperature',
         type=float,
-        default=0.7,
+        default=0.0,
         help="采样温度"
     )
     
     parser.add_argument(
         '--top_k',
         type=int,
-        default=20,
+        default=-1,
         help="Top-k采样参数"
     )
 
     parser.add_argument(
         '--top_p',
         type=float,
-        default=0.8,
+        default=1,
         help="Top-p采样参数"
     )
     parser.add_argument(
         '--repetition_penalty',
         type=float,
-        default=1.05,
+        default=1.0,
         help="重复惩罚系数"
     )
 
@@ -142,7 +142,7 @@ class Config:
                  top_k: int = 20,
                  top_p: float = 0.8,
                  repetition_penalty: float = 1.05,
-                 output_dir: str = "./output",
+                 output_dir: str = "./outputs",
                  log_dir: str = "./logs",
                  seed: int = 3407):
         self.seed = seed
@@ -240,6 +240,7 @@ Here are an example.
             print(f"------------------------Turn{i}-------------------------")
             params = SamplingParams(
                 max_tokens=self.config.max_tokens,
+                # temperature=0,
                 temperature=self.config.temperature,
                 top_p=self.config.top_p,
                 top_k=self.config.top_k,
@@ -248,7 +249,7 @@ Here are an example.
             )
             prompts = [s['prompt']+ f"Thought {i}:" for s in unfinished_seqs]
             prompts = [{"role": "user", "content": p} for p in prompts]
-            prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True) for p in prompts]
+            prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True,enable_thinking=False) for p in prompts]
             outputs = self.llm.generate(prompts , params)
             thought_action_list = [output.outputs[0].text for output in outputs]
             
@@ -302,6 +303,7 @@ Here are an example.
 
                 params = SamplingParams(
                     max_tokens=self.config.max_tokens,
+                    # temperature=0,
                     temperature=self.config.temperature,
                     top_p=self.config.top_p,
                     top_k=self.config.top_k,
@@ -312,7 +314,7 @@ Here are an example.
 
 
                 new_prompts = [{"role": "user", "content": p} for p in new_prompts]
-                new_prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True) for p in new_prompts]
+                new_prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True,enable_thinking=False) for p in new_prompts]
                 outputs = self.llm.generate(new_prompts , params)
                 new_action_list = [output.outputs[0].text for output in outputs]
 
@@ -375,12 +377,14 @@ Here are an example.
 
         # 保存评估结果
         result_path = self.config.output_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"
-        strategy.save_results(result_path,"react", self.config.split,total_time, apply_backoff=False)
+        strategy.save_results(result_path,"react", self.config.split,total_time,self.start_time, apply_backoff=False)
         
         
         return states
 
 if __name__ == "__main__":
+
+    print("Starting react pipeline...\n Time:", datetime.now())
 
     setup_seed(3407)
     args = parse_args()

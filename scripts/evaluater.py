@@ -221,7 +221,7 @@ class GeneralEvaluationStrategy(BaseEvaluationStrategy):
         elif self.dataset_name in ['math500', 'aime', 'amc']:
             labeled_answer = item["answer"]
             mode = 'gen'
-        elif self.dataset_name in ['nq', 'triviaqa', 'hotpotqa', 'musique', 'bamboogle', '2wiki', 'example']:
+        elif self.dataset_name in ['nq', 'triviaqa', 'hotpotqa', 'musique', 'bamboogle', '2wiki', 'example', 'popqa', 'fever']:
             labeled_answer = item["answer"]
             mode = 'qa'
         elif self.dataset_name in ['pubhealth']:
@@ -264,7 +264,7 @@ class GeneralEvaluationStrategy(BaseEvaluationStrategy):
                 item['Output'], labeled_answer, mode
             )
             
-            item.update({'Pred_Answer': pred_answer, 'Metrics': metric, 'Question': input_prompt})
+            item.update({'Pred_Answer': pred_answer, 'Metrics': metric, 'Input':input_prompt})
 
             my_method_valid = (pred_answer != '' and not (mode == 'choose' and self.dataset_name == 'gpqa' and len(pred_answer) > 1))
             self._update_metrics(metric, item, my_method_valid)
@@ -291,10 +291,10 @@ class GeneralEvaluationStrategy(BaseEvaluationStrategy):
         
         return {'overall': overall, 'per_domain': domain_metrics}
     
-    def save_results(self, output_dir,method, split, total_time, apply_backoff=False):
-        t = time.localtime()
-        result_name = f"{method}.{split}.{t.tm_mon}.{t.tm_mday},{t.tm_hour}:{t.tm_min}.json"
-        metrics_name = f'{method}.{split}.{t.tm_mon}.{t.tm_mday},{t.tm_hour}:{t.tm_min}.metrics.json'
+    def save_results(self, output_dir, method, split, total_time, start_time, apply_backoff=False):
+        t = start_time
+        result_name = f"{method}.{split}.{t.month}.{t.day},{t.hour}:{t.minute}.json"
+        metrics_name = f'{method}.{split}.{t.month}.{t.day},{t.hour}:{t.minute}.metrics.json'
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -319,6 +319,8 @@ class EvaluationStrategyFactory:
         'hotpotqa': lambda: GeneralEvaluationStrategy('hotpotqa'),
         'musique': lambda: GeneralEvaluationStrategy('musique'),
         'bamboogle': lambda: GeneralEvaluationStrategy('bamboogle'),
+        'fever': lambda: GeneralEvaluationStrategy('fever'),
+        'popqa': lambda: GeneralEvaluationStrategy('popqa'),
         'default': lambda: GeneralEvaluationStrategy('default')
     }
     
