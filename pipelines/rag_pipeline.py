@@ -1,5 +1,6 @@
 import logging
-from typing import List, Dict, Any
+from collections import deque
+from typing import List, Dict, Any, Tuple
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 import torch
@@ -11,6 +12,7 @@ from scripts.data_loader import DatasetLoader
 from scripts.evaluater import EvaluationStrategyFactory
 from scripts.seed import setup_seed
 from scripts.search.retrieval_client import RetrievalClient, QueryRequest
+from prompts import get_rag_instruction
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,13 @@ def parse_args():
         type=str,
         required=True,
         help="模型路径"
+    )
+
+    parser.add_argument(
+        '--retriever_name',
+        type=str,
+        default="e5",
+        help="检索器名称"
     )
 
     parser.add_argument(
@@ -128,6 +137,7 @@ class Config:
     def __init__(self, 
                  model_path: str = "/workspace/Search-R1/models",
                  data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
+                 retriever_name: str = "e5",
                  retrieval_url: str = "http://localhost:8000",
                  dataset_name: str = "2wiki",
                  split: str = "test",
@@ -145,6 +155,7 @@ class Config:
         self.model_path = model_path
         self.model_name = os.path.basename(model_path)
         self.data_path = data_path
+        self.retriever_name = retriever_name
         self.retrieval_url = retrieval_url
         self.dataset_name = dataset_name
         self.split = split
@@ -171,6 +182,10 @@ class ContextTreeNode:
 class Generator:
     def __init__(self, config: Config):
         self.start_time = datetime.now()
+
+        self.total_time = 0
+        self.retrieval_num = 0
+
         self.config = config
         self.llm = LLM(
             model=config.model_path,
@@ -191,13 +206,7 @@ class Generator:
         self.dataset_loader = DatasetLoader(self.config.data_path)
 
 
-        self.prompt_template = (
-            "Answer the following question:\n"
-            "You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.\n"
-            "You can use the following documents to help you answer the question.\n"
-            "Documents: {context}\n\n"
-            "Question: {question}\n\n"
-        )
+        self.prompt_template = get_rag_instruction()
 
         self.root_node = ContextTreeNode("ROOT")
         self.current_nodes = [self.root_node]
@@ -208,8 +217,13 @@ class Generator:
         response = self.retrieval_client.query(request)
         context_map = {}
         for idx, results in enumerate(response.results):
-            context = "\n".join([f"[Doc {i+1}] {res.document.contents}" for i, res in enumerate(results)])
+            context = [(res.document.id, res.document.contents) for res in results]
+            
+            # context = "\n".join([f"[Doc {i+1}] {res.document.contents}" for i, res in enumerate(results)])
             context_map[idx] = context
+
+        self.retrieval_num += len(context_map) * 7
+        print(f"Retrieved {len(context_map)} pieces of context information, accumulated {self.retrieval_num} retrievals.")
         return context_map
 
     def _parallel_retrieve(self, subqueries: List[str]) -> Dict[int, str]:
@@ -254,7 +268,7 @@ class Generator:
        
         # 批量生成最终答案
 
-        prompts = [self.prompt_template.format(context=node.context, question=node.query) 
+        prompts = [self.prompt_template.format(context= "\n".join(content for _, content in node.context), question=node.query) 
                   for node in root_nodes]
 
         prompts = [{"role": "user", "content": up} for up in prompts]
@@ -269,8 +283,12 @@ class Generator:
             # repetition_penalty=self.config.repetition_penalty,
         )
 
+        start_time = datetime.now()
         outputs = self.llm.generate(prompts, params)
+        self.total_time += (datetime.now() - start_time).total_seconds()
 
+
+        retrieval_info = self.collect_contexts_per_level(root_nodes)
         output_list = [output.outputs[0].text for output in outputs]
         
         
@@ -295,21 +313,26 @@ class Generator:
             except Exception as e:
                 logger.warning(f"查询树节点记录失败: {e}")
 
-
     
         # 计算总耗时
-        total_time = (datetime.now() - self.start_time).total_seconds()
+        # total_time = (datetime.now() - self.start_time).total_seconds()
             
         #评估结果
         strategy = EvaluationStrategyFactory.get_strategy(self.config.dataset_name)
-
+        
         # 准备评估样本
-        strategy.prepare_samples(data, prompts, output_list)
+        strategy.prepare_samples(data, prompts, output_list, retrieval_info)
 
         # 保存评估结果
-        result_path = self.config.output_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"
-        strategy.save_results(result_path,"rag", self.config.split,total_time,self.start_time, apply_backoff=False)
+        result_path = self.config.output_dir + f"/{self.config.model_name}" +f"/{self.config.retriever_name}"+ f"/{self.config.dataset_name}"
+        strategy.save_results(result_path, "rag", self.config.split, self.total_time, self.start_time, self.retrieval_num, apply_backoff=False)
         
+
+        ##记录检索到的文档信息
+        t =self.start_time.strftime("%m%d.%H:%M")
+        self.save_list_of_list_of_lists_to_jsonl(retrieval_info, result_path  + "/rag." + f"{self.config.split}." + f"{t}.context.jsonl")
+
+
         return [output.outputs[0].text for output in outputs]
     
     def _serialize_tree(self, root_node: ContextTreeNode) -> list:
@@ -331,6 +354,37 @@ class Generator:
             nodes_list.append(node_data)
             queue.extend(current.children)
         return nodes_list
+    
+    def collect_contexts_per_level(self, nodes: List[ContextTreeNode]) -> List[List[List[Tuple[str, str]]]]:
+        """
+        对每棵树进行层级遍历，返回每层的节点context，格式为 List[List[List[Tuple[str, str]]]]
+        """
+
+        all_tree_levels = []
+
+        for root in nodes:
+            queue = deque([root])
+            levels = []
+
+            while queue:
+                level_size = len(queue)
+                current_level = []
+
+                for _ in range(level_size):
+                    node = queue.popleft()
+                    current_level.extend(node.context)
+                    queue.extend(node.children)
+
+                levels.append(current_level)
+
+            all_tree_levels.append(levels)
+
+        return all_tree_levels
+    def save_list_of_list_of_lists_to_jsonl(self, data: List[List[List[Tuple[str, str]]]], filename: str):
+        with open(filename, 'w', encoding='utf-8') as f:
+            for two_level_list in data:  # data的每个元素是list[list[Tuple[str, str]]]
+                json_line = json.dumps(two_level_list, ensure_ascii=False)
+                f.write(json_line + '\n')
 
 if __name__ == "__main__":
 
@@ -342,16 +396,11 @@ if __name__ == "__main__":
     config = Config(
         model_path=args.model_path,
         data_path=args.data_path,
+        retriever_name=args.retriever_name,
         retrieval_url=args.retrieval_url,
         dataset_name=args.dataset_name,
         split=args.split,
         topk=args.topk,
-        max_context_length=args.max_context_length,
-        max_tokens=args.max_tokens,
-        temperature=args.temperature,
-        top_k=args.top_k,
-        top_p=args.top_p,
-        repetition_penalty=args.repetition_penalty,
         output_dir=args.output_dir,
         log_dir=args.log_dir
     )

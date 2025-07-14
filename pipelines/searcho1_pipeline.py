@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple 
 
 from transformers import AutoTokenizer
 from transformers.pipelines.automatic_speech_recognition import rescale_stride
@@ -43,6 +43,13 @@ def parse_args():
         type=str,
         required=True,
         help="模型路径"
+    )
+
+    parser.add_argument(
+        '--retriever_name',
+        type=str,
+        default="e5",
+        help="检索器名称"
     )
 
     parser.add_argument(
@@ -161,13 +168,13 @@ def parse_args():
 class Config:
     def __init__(self, 
                  model_path: str = "/workspace/Search-R1/models",
+                 retriever_name: str = "e5",
                  retrieval_url: str = "http://localhost:8000",
                  data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
                  dataset_name: str = "2wiki",
                  split: str = "test",
                  topk: int = 3,
                  max_context_length: int = 4096,
-                 max_depth: int = 3,
                  max_search_limit: int = 7,
                  max_turn: int = 15,
                  max_tokens: int = 20480,
@@ -187,6 +194,7 @@ class Config:
         self.data_path = data_path
 
         ##检索服务的地址
+        self.retriever_name = retriever_name
         self.retrieval_url = retrieval_url
 
         ##数据集和划分
@@ -196,7 +204,6 @@ class Config:
         ##检索文档的个数、最大上下文长度、检索树的最大深度
         self.topk = topk
         self.max_context_length = max_context_length
-        self.max_depth = max_depth
 
         ##最大检索次数和最大论数
         self.max_search_limit = max_search_limit
@@ -216,6 +223,10 @@ class Config:
 class Generator:
     def __init__(self, config: Config):
         self.start_time = datetime.now()
+
+        self.retrieval_num = 0
+        self.total_time = 0
+
         self.config = config
         self.llm = LLM(
             model=config.model_path,
@@ -240,8 +251,10 @@ class Generator:
 
         if 'qwen' in self.config.model_name:
             self.config.repetition_penalty = 1.05
+            self.config.max_tokens = 5120
         elif 'llama' in self.config.model_name:
             self.config.repetition_penalty = 1.0
+            self.config.max_tokens = 8192
 
     def prepare_prompts(self,filtered_data, dataset_name, model_path, MAX_SEARCH_LIMIT, subset_num=-1):
         
@@ -281,22 +294,28 @@ class Generator:
             'history': [],
             'search_count': 0,
             'executed_search_queries': set(),
+            'retrieval_info': [],
         } for item, prompt in zip(filtered_data, input_list)]
 
 
 
         return input_list, active_sequences
 
-    def _retrieve_context(self, queries: List[str]) -> Dict[int, str]:
+    def _retrieve_context(self, queries: List[str]) -> Dict[int, List[str]]:
         request = QueryRequest(queries=queries, topk=self.config.topk)
         response = self.retrieval_client.query(request)
         context_map = {}
         for idx, result in enumerate(response.results):
-            context = "\n".join([f"[Doc {i+1}] {res.document.contents}" for i, res in enumerate(result)])
+            # context = "\n".join([f"[Doc {i+1}] {res.document.contents}" for i, res in enumerate(result)])
+            context = [(res.document.id, res.document.contents) for res in result]
             context_map[idx] = context
+
+        
+        self.retrieval_num += len(context_map)
+        print(f"Retrieved {len(context_map)} pieces of context information, accumulated {self.retrieval_num} retrievals.")
         return context_map
 
-    def _parallel_retrieve(self, subqueries: List[str]) -> Dict[int, str]:
+    def _parallel_retrieve(self, subqueries: List[str]) -> Dict[int, List[str]]:
         # 直接尝试调用 _retrieve_context 并返回其结果
         try:
             return self._retrieve_context(subqueries)
@@ -331,7 +350,10 @@ class Generator:
             stop=[END_SEARCH_QUERY, self.tokenizer.eos_token],
             include_stop_str_in_output=True,
         )
+        start_time = datetime.now()
         output_list = self.llm.generate(prompts, sampling_params=sampling_params)
+        self.total_time += (datetime.now() - start_time).total_seconds()
+
         return output_list
 
         # Function to extract text between two tags
@@ -431,6 +453,7 @@ class Generator:
         max_tokens: int = 32768,
         coherent: bool = False,
     ) -> List[str]:
+        
         user_prompts = [
             get_webpage_to_reasonchain_instruction(r, sq, doc)
             for r, sq, doc in zip(prev_reasonings, search_queries, documents)
@@ -439,10 +462,11 @@ class Generator:
         prompts = [{"role": "user", "content": up} for up in user_prompts]
         prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True) for p in prompts]
 
+        start_time = datetime.now()
         output = self.llm.generate(
             prompts,
             sampling_params=SamplingParams(
-                max_tokens=self.config.max_tokens,
+                max_tokens=max_tokens,
                 # temperature=0,
                 temperature=self.config.temperature,
                 top_p=self.config.top_p,
@@ -450,6 +474,7 @@ class Generator:
                 repetition_penalty=self.config.repetition_penalty
             )
         )
+        self.total_time += (datetime.now() - start_time).total_seconds()
 
         raw_outputs = [out.outputs[0].text for out in output]
         extracted_infos = [EvaluationUtils.extract_answer(raw, mode='infogen') for raw in raw_outputs]
@@ -512,7 +537,7 @@ class Generator:
 
                             try:
                                 results = self._parallel_retrieve([search_query])
-                                print(f"Executed search for query: \"{search_query}\"")
+                                # print(f"Executed search for query: \"{search_query}\"")
                             except Exception as e:
                                 print(f"Error during search query '{search_query}': {e}")
                                 results = {}  
@@ -520,8 +545,8 @@ class Generator:
                             # Extract relevant information from Bing search results
                             
 
-                            result = results.get(0, "")
-                            seq['relevant_info'] = result 
+                            result = results.get(0, [""])
+                            seq['retrieval_info'].append(result)  # Store retrieval info in the sequence
 
                             all_reasoning_steps = seq['output'] # 从序列中获取原始推理输出
                             all_reasoning_steps = all_reasoning_steps.replace('\n\n', '\n').split("\n") # 规范化换行符并拆分为列表
@@ -548,7 +573,8 @@ class Generator:
                             batch_original_questions.append(seq['item']['Question'])
                             batch_prev_reasonings.append(truncated_prev_reasoning)
                             batch_search_queries.append(search_query)
-                            batch_documents.append(result)
+                            documents = "\n".join([f"[Doc {i+1}] {res[1]}" for i, res in enumerate(result)])
+                            batch_documents.append(documents)
                             batch_sequences.append(seq)
 
                             # Update search count and executed queries
@@ -608,24 +634,33 @@ class Generator:
 
         
         
-
+        retrieval_info = [seq['retrieval_info'] for seq in active_sequences]
         output_list = [seq['output'] for seq in active_sequences]
     
         # 计算总耗时
-        total_time = (datetime.now() - self.start_time).total_seconds()
+        # total_time = (datetime.now() - self.start_time).total_seconds()
             
         #评估结果
         strategy = EvaluationStrategyFactory.get_strategy(self.config.dataset_name)
 
         # 准备评估样本
-        strategy.prepare_samples(data, input_list, output_list)
+        strategy.prepare_samples(data, input_list, output_list,retrieval_info)
 
         # 保存评估结果
-        result_path = self.config.output_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"
-        strategy.save_results(result_path,"searcho1", self.config.split,total_time,self.start_time, apply_backoff=False)
+        result_path = self.config.output_dir + f"/{self.config.model_name}" +f"/{self.config.retriever_name}" + f"/{self.config.dataset_name}"
+        strategy.save_results(result_path, "searcho1", self.config.split, self.total_time, self.start_time, self.retrieval_num, apply_backoff=False)
+        
+        t =self.start_time.strftime("%m%d.%H:%M")
+        self.save_list_of_list_of_lists_to_jsonl(retrieval_info, result_path  + "/searcho1." + f"{self.config.split}." + f"{t}.context.jsonl")
         
         return [output.outputs[0].text for output in outputs]
     
+
+    def save_list_of_list_of_lists_to_jsonl(self, data: List[List[List[Tuple[str, str]]]], filename: str):
+        with open(filename, 'w', encoding='utf-8') as f:
+            for two_level_list in data:  # data的每个元素是list[list[Tuple[str, str]]]
+                json_line = json.dumps(two_level_list, ensure_ascii=False)
+                f.write(json_line + '\n')
 
 
 if __name__ == "__main__":
@@ -639,45 +674,36 @@ if __name__ == "__main__":
     args = parse_args()
     # 测试用例
 
+    config = Config(
+    model_path=args.model_path,
+    data_path=args.data_path,
+    retriever_name=args.retriever_name,
+    retrieval_url=args.retrieval_url,
+    dataset_name=args.dataset_name,
+    split=args.split,
+    topk=args.topk,
+    max_search_limit=args.max_search_limit,
+    max_turn=args.max_turn,
+    output_dir=args.output_dir,
+    log_dir=args.log_dir)
+
+    # os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
+    # os.environ['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
 
     # config = Config(
-    #     model_path="/workspace/Search-o1/models/qwq_awq",
+    #     model_path="/workspace/Search-R1/models/llama-3.1-8b-instruct",
     #     data_path="/workspace/Search-R1/config/dataset_paths.json",
+    #     retriever_name="bge",
     #     retrieval_url="http://localhost:8000",
     #     dataset_name="example",
     #     split="test",
     #     topk=3,
-    #     max_depth=3,
-    #     max_search_limit=3,
-    #     max_turn=3,
-    #     max_tokens=10240,
-    #     temperature=0.7,
-    #     top_p=0.8,
-    #     top_k=20,
-    #     repetition_penalty=1.05,
-    #     max_context_length=4096,
-    #     output_dir="./output/example",
-    #     log_dir="./logs/example"
+    #     max_search_limit= 15,
+    #     max_turn= 15,
+    #     output_dir="./outputs",
+    #     log_dir="./logs"
 
     # )
-    config = Config(
-        model_path=args.model_path,
-        data_path=args.data_path,
-        retrieval_url=args.retrieval_url,
-        dataset_name=args.dataset_name,
-        split=args.split,
-        topk=args.topk,
-        max_depth=args.max_depth,
-        max_search_limit=args.max_search_limit,
-        max_turn=args.max_turn,
-        max_tokens=args.max_tokens,
-        temperature=args.temperature,
-        top_p=args.top_p,
-        top_k=args.top_k,
-        repetition_penalty=args.repetition_penalty,
-        max_context_length=args.max_context_length,
-        output_dir=args.output_dir,
-        log_dir=args.log_dir)
 
 
     generator = Generator(config)

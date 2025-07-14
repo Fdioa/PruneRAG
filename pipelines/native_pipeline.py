@@ -9,6 +9,7 @@ import os,sys
 from scripts.data_loader import DatasetLoader
 from scripts.evaluater import EvaluationStrategyFactory
 from scripts.seed import setup_seed
+from prompts import get_native_instruction
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,10 @@ class Config:
 class Generator:
     def __init__(self, config: Config):
         self.start_time = datetime.now()
+
+        self.total_time = 0
+        self.retrieval_num = 0
+
         self.config = config
         self.llm = LLM(
             model=config.model_path,
@@ -141,13 +146,7 @@ class Generator:
         self.dataset_loader = DatasetLoader(self.config.data_path)
 
 
-        self.prompt_template = (
-            "Answer the following question:\n"
-            "You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.\n"
-            "Question: {question}\n\n"
-            "Answer:"
-        )
-
+        self.prompt_template = get_native_instruction()
 
 
     def generate(self, **sampling_params) -> List[str]:
@@ -172,14 +171,16 @@ class Generator:
             # repetition_penalty=self.config.repetition_penalty,
         )
 
+        start_time = datetime.now()
         outputs = self.llm.generate(prompts, params)
+        self.total_time += (datetime.now() - start_time).total_seconds()
 
         output_list = [out_put.outputs[0].text for out_put in outputs]
 
         
        
         # 计算总耗时
-        total_time = (datetime.now() - self.start_time).total_seconds()
+        # total_time = (datetime.now() - self.start_time).total_seconds()
             
         #评估结果
         strategy = EvaluationStrategyFactory.get_strategy(self.config.dataset_name)
@@ -189,7 +190,7 @@ class Generator:
 
         # 保存评估结果
         result_path = self.config.output_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"
-        strategy.save_results(result_path,"native", self.config.split,total_time,self.start_time, apply_backoff=False)
+        strategy.save_results(result_path, "native", self.config.split, self.total_time, self.start_time, self.retrieval_num, apply_backoff=False)
         
         return [output.outputs[0].text for output in outputs]
 
@@ -211,11 +212,6 @@ if __name__ == "__main__":
         data_path=args.data_path,
         dataset_name=args.dataset_name,
         split=args.split,
-        max_tokens=args.max_tokens,
-        temperature=args.temperature,
-        top_k=args.top_k,
-        top_p=args.top_p,
-        repetition_penalty=args.repetition_penalty,
         output_dir=args.output_dir
     )
     generator = Generator(config)
