@@ -13,11 +13,11 @@ from scripts.evaluater import EvaluationStrategyFactory
 from scripts.seed import setup_seed
 from scripts.search.retrieval_client import RetrievalClient, QueryRequest
 from prompts import (
-                    get_subqueries_qwen3_8b,
+                    get_subqueries_qwen3_8b_wo_ent,
                     get_subqueries_qwen3_8b_first,
                     get_final_answer_qwen3_8b,
                     get_subqueries_llama3_8b_first,
-                    get_subqueries_llama3_8b,
+                    get_subqueries_llama3_8b_wo_ent,
                     get_final_answer_llama3_8b)
 
 logger = logging.getLogger(__name__)
@@ -116,7 +116,7 @@ def parse_args():
     parser.add_argument(
         '--threshold',
         type=float,
-        default=0.95,
+        default=0.8,
         help="答案置信度阈值，低于此值的答案将被重新处理"
     )
 
@@ -167,7 +167,7 @@ class Config:
                  max_context_length: int = 4096,
                  max_depth: int = 3,
                  all_decom_depth: int = 0,
-                 threshold: float = 0.95,
+                 threshold: float = 0.8,
                  max_tokens: int = 10240,
                  temperature: float = 0.7,
                  top_k: int = 20,
@@ -244,15 +244,15 @@ class Generator:
 
         if 'qwen' in self.config.model_name:
             self.subquery_first_template = get_subqueries_qwen3_8b_first()
-            self.subquery_template = get_subqueries_qwen3_8b()
+            self.subquery_template = get_subqueries_qwen3_8b_wo_ent()
             self.answer_template = get_final_answer_qwen3_8b()
-            self.config.max_tokens = 4096 # qwen3-8b的最大token数为4096
+            self.config.max_tokens = 4096 # qwen3-8b的最大token数为10240
             self.logprobs_size = 100
         elif 'llama' in self.config.model_name:
             self.subquery_first_template = get_subqueries_llama3_8b_first()
-            self.subquery_template = get_subqueries_llama3_8b()
+            self.subquery_template = get_subqueries_llama3_8b_wo_ent()
             self.answer_template = get_final_answer_llama3_8b()
-            self.config.max_tokens = 4096 # llama3-8b的最大token数为4096
+            self.config.max_tokens = 4096 # llama3-8b的最大token数为1024
             self.logprobs_size = 100
 
 
@@ -378,14 +378,15 @@ class Generator:
             answer_re = r'\{\s*\"type\"\s*:\s*\"answer\".*?\}'
                        
                         
-            # 3. Entity 模式
-            entity_re = r'\{\s*\"type\"\s*:\s*\"entity\".*?\}'
+            # # 3. Entity 模式
+            # entity_re = r'\{\s*\"type\"\s*:\s*\"entity\".*?\}'
 
             # 将所有模式合并为一个，使用非捕获组 (?:...)
             # 优先匹配```json```块内的内容，以处理常见格式
             # 然后再匹配裸的JSON对象
             combined_json_pattern = re.compile(
-                r'((' + decomposition_re + r')|(' + answer_re + r')|(' + entity_re + r'))',
+                # r'((' + decomposition_re + r')|(' + answer_re + r')|(' + entity_re + r'))',
+                r'((' + decomposition_re + r')|(' + answer_re + r'))',
                 re.DOTALL
             )
 
@@ -451,14 +452,14 @@ class Generator:
                             processed_item["confidence"] = 0
 
 
-                    elif json_type == "entity" and "entity1" in parsed_json and "entity2" in parsed_json:
-                        processed_item = {
-                            "type": "entity",
-                            "entities": [
-                                (str(parsed_json['entity1']) or "").strip(),
-                                (str(parsed_json['entity2']) or "").strip()
-                            ]
-                        }
+                    # elif json_type == "entity" and "entity1" in parsed_json and "entity2" in parsed_json:
+                    #     processed_item = {
+                    #         "type": "entity",
+                    #         "entities": [
+                    #             (str(parsed_json['entity1']) or "").strip(),
+                    #             (str(parsed_json['entity2']) or "").strip()
+                    #         ]
+                    #     }
                     else:
                         # 匹配到了 JSON 结构，但 type 字段不符合预期或缺少关键键
                         # logger.warning(f"最后一个 JSON 字符串类型不符合预期或缺失关键键: {json_type}, JSON: {json_str[:100]}...")
@@ -594,17 +595,17 @@ class Generator:
                         node.answer_again = "In the last round, the action you chose was to answer directly, but the confidence of your answer is very low, so please rethink your action."
                         node_queue.append(node)  # 如果置信度较低，保留节点以便后续处理
 
-                elif processed_results[idx].get("type") == "entity":
+                # elif processed_results[idx].get("type") == "entity":
 
-                    # 如果是分解子查询，直接使用
-                    node.subqueries = processed_results[idx]["entities"]
+                #     # 如果是分解子查询，直接使用
+                #     node.subqueries = processed_results[idx]["entities"]
 
-                    # 创建子节点但是不加入队列
-                    for subq in node.subqueries:
-                        child_node = ContextTreeNode(subq, parent=node)
-                        child_node.type = "entity"  # 标记为实体查询节点
-                        node.children.append(child_node)
-                        # node_queue.append(child_node)
+                #     # 创建子节点但是不加入队列
+                #     for subq in node.subqueries:
+                #         child_node = ContextTreeNode(subq, parent=node)
+                #         child_node.type = "entity"  # 标记为实体查询节点
+                #         node.children.append(child_node)
+                #         # node_queue.append(child_node)
                 
                 elif processed_results[idx].get("type") == "error":
                     # 如果是错误，记录错误信息并跳过子查询生成
@@ -665,15 +666,15 @@ class Generator:
 
         # 保存评估结果
         result_path = self.config.output_dir + f"/{self.config.model_name}" +f"/{self.config.retriever_name}" +f"/{self.config.dataset_name}"
-        strategy.save_results(result_path, "tree", self.config.split, self.total_time, self.start_time, self.retrieval_num, apply_backoff=False)
+        strategy.save_results(result_path, "tree_wo_ent", self.config.split, self.total_time, self.start_time, self.retrieval_num, apply_backoff=False)
         
 
 
         ##记录检索到的文档信息
         t =self.start_time.strftime("%m%d.%H:%M")
-        self.save_list_of_list_of_lists_to_jsonl(retrieval_info, result_path  + "/tree." + f"{self.config.split}." + f"{t}.context.jsonl")
+        self.save_list_of_list_of_lists_to_jsonl(retrieval_info, result_path  + "/tree_wo_ent." + f"{self.config.split}." + f"{t}.context.jsonl")
 
-        ##记录树结构
+        # 记录树结构
         results = []
         for output, root in zip(outputs, root_nodes):
             result = {
@@ -686,7 +687,7 @@ class Generator:
             # 保存到JSONL文件
             try:
                 t=self.start_time.strftime("%m%d.%H:%M")
-                log_path= self.config.log_dir +f"/{self.config.model_name}"+f"/{self.config.dataset_name}"+f"/{t}._tree_query_tree.jsonl"
+                log_path= self.config.log_dir +f"/{self.config.model_name}"+f"/{self.config.dataset_name}"+f"/{t}._tree_wo_ent_query_tree.jsonl"
                 os.makedirs(os.path.dirname(log_path), exist_ok=True)
                 with open(log_path, "a") as f:
                     for node in self._serialize_tree(root):
@@ -695,8 +696,8 @@ class Generator:
                 logger.warning(f"查询树节点记录失败: {e}")
 
 
-        ##记录子查询生成结果
-        jsonl_path = self.config.log_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"+f"/outputs"+ f"/{t}_tree_subqueries_outputs.jsonl"
+        # 记录子查询生成结果
+        jsonl_path = self.config.log_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"+f"/outputs"+ f"/{t}_tree_wo_ent_subqueries_outputs.jsonl"
         os.makedirs(os.path.dirname(jsonl_path), exist_ok=True)
     
         try:
@@ -707,8 +708,8 @@ class Generator:
             logger.warning(f"子查询生成结果记录失败: {e}")
 
         
-        return output_list
-    
+        return [output.outputs[0].text for output in outputs]
+
     def _serialize_tree(self, root_node: ContextTreeNode) -> list:
         """非递归广度优先序列化所有节点"""
         from collections import deque
@@ -802,8 +803,7 @@ if __name__ == "__main__":
         all_decom_depth=args.all_decom_depth,
         threshold=args.threshold,
         output_dir=args.output_dir,
-        log_dir=args.log_dir,
-        seed = 3407)
+        log_dir=args.log_dir)
 
     # os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
     # os.environ['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'

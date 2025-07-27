@@ -1,4 +1,4 @@
-import logging,math
+import logging
 from typing import List, Dict, Any, Union, Tuple
 from collections import deque
 from transformers import AutoTokenizer
@@ -116,7 +116,7 @@ def parse_args():
     parser.add_argument(
         '--threshold',
         type=float,
-        default=0.95,
+        default=0.8,
         help="答案置信度阈值，低于此值的答案将被重新处理"
     )
 
@@ -167,7 +167,7 @@ class Config:
                  max_context_length: int = 4096,
                  max_depth: int = 3,
                  all_decom_depth: int = 0,
-                 threshold: float = 0.95,
+                 threshold: float = 0.8,
                  max_tokens: int = 10240,
                  temperature: float = 0.7,
                  top_k: int = 20,
@@ -202,7 +202,6 @@ class ContextTreeNode:
     def __init__(self, query: str, parent=None):
         self.query = query
         self.query_answer: str = ""
-        self.answer_again: str = ""
         self.depth = parent.depth + 1 if parent else 0
         self.subqueries: List[str] = []
         self.context: str = ""
@@ -215,8 +214,6 @@ class Generator:
         self.start_time = datetime.now()
         self.config = config
 
-        
-
         self.retrieval_num = 0
         self.total_time = 0
 
@@ -225,7 +222,6 @@ class Generator:
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=0.90,
             max_model_len=40960,
-            max_logprobs=100,
             seed = config.seed)
 
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -246,92 +242,18 @@ class Generator:
             self.subquery_first_template = get_subqueries_qwen3_8b_first()
             self.subquery_template = get_subqueries_qwen3_8b()
             self.answer_template = get_final_answer_qwen3_8b()
-            self.config.max_tokens = 4096 # qwen3-8b的最大token数为4096
-            self.logprobs_size = 100
+            self.config.max_tokens = 4096 # qwen3-8b的最大token数为10240
         elif 'llama' in self.config.model_name:
             self.subquery_first_template = get_subqueries_llama3_8b_first()
             self.subquery_template = get_subqueries_llama3_8b()
             self.answer_template = get_final_answer_llama3_8b()
-            self.config.max_tokens = 4096 # llama3-8b的最大token数为4096
-            self.logprobs_size = 100
-
-
-    # --- 核心函数：从完整文本和 logprobs 中提取特定字符串的 logprobs ---
-
-    def get_logprobs_for_matched_string(self, model_output_data: Dict[str, Any], target_string: str) -> List[Dict[str, Any]]:
-        full_text = model_output_data["text"]
-        # 这里的 token_logprobs 是 List[TokenLogprobsDict]
-        vllm_logprobs_list_of_dicts = model_output_data["logprobs"] 
-
-        # --- 关键修改：从 VLLM 的 logprobs 结构中提取实际生成的 token 及其 logprob ---
-        processed_token_logprobs = []
-        # 遍历每个位置的 logprobs 字典
-        for token_pos_logprobs_dict in vllm_logprobs_list_of_dicts:
-            # 在每个字典中找到 rank=1 对应的 Logprob 对象，它代表实际生成的 token
-            # 我们可以通过遍历字典的值来找到 rank=1 的那个
-            actual_token_logprob_obj = None
-            for logprob_val in token_pos_logprobs_dict.values():
-                if logprob_val.rank == 1:
-                    actual_token_logprob_obj = logprob_val
-                    break
-            
-            if actual_token_logprob_obj:
-                processed_token_logprobs.append({
-                    "token": actual_token_logprob_obj.decoded_token,
-                    "logprob": actual_token_logprob_obj.logprob
-                })
-            # else: 如果某个位置没有 rank=1 的 token，这通常不应该发生，但可以添加警告
-
-        # --- 后续逻辑与之前基本相同，使用处理后的 processed_token_logprobs ---
-        matches = list(re.finditer(re.escape(target_string), full_text))
-
-        results = []
-
-        for match in matches:
-            start_char_idx = match.start()
-            end_char_idx = match.end()
-
-            matched_tokens = []
-            current_char_offset = 0
-            
-            start_token_idx = -1
-            end_token_idx = -1
-
-            for i, token_info in enumerate(processed_token_logprobs):
-                token_text = token_info["token"]
-                token_length = len(token_text)
-
-                # 检查当前token的字符范围是否与匹配字符串的字符范围有重叠
-                if max(current_char_offset, start_char_idx) < min(current_char_offset + token_length, end_char_idx):
-                    if start_token_idx == -1:
-                        start_token_idx = i
-                    end_token_idx = i 
-                elif start_token_idx != -1: 
-                    break
-
-                current_char_offset += token_length
-            
-            if start_token_idx != -1 and end_token_idx != -1:
-                matched_tokens = processed_token_logprobs[start_token_idx : end_token_idx + 1]
-
-            cumulative_logprob = sum(t['logprob'] for t in matched_tokens) if matched_tokens else 0
-
-            results.append({
-                "matched_string": target_string,
-                "start_char_index": start_char_idx,
-                "end_char_idx": end_char_idx,
-                "tokens_info": matched_tokens,
-                "cumulative_logprob": cumulative_logprob
-            })
-        
-        return results
-
+            self.config.max_tokens = 4096 # llama3-8b的最大token数为1024
 
 
     def _generate_subqueries(self, nodes: List[ContextTreeNode]) -> List[List[str]]:
 
         if nodes[0].depth > self.config.all_decom_depth:
-            prompts = [self.subquery_template.format(query=node.query, parent_query=node.parent.query, context= "\n".join(content for _, content in node.context)) + node.answer_again for node in nodes]
+            prompts = [self.subquery_template.format(query=node.query, parent_query=node.parent.query, context= "\n".join(content for _, content in node.context)) for node in nodes]
         else:
             prompts = [self.subquery_first_template.format(query=node.query, context = "\n".join(content for _, content in node.context)) for node in nodes]
         prompts = [{"role": "user", "content": up} for up in prompts]
@@ -340,7 +262,6 @@ class Generator:
         params = SamplingParams(
             max_tokens=self.config.max_tokens,
             temperature=0,
-            logprobs=self.logprobs_size
             # top_p=self.config.top_p,
             # top_k=self.config.top_k,
             # repetition_penalty=self.config.repetition_penalty,
@@ -353,18 +274,9 @@ class Generator:
         print("Finish generating subqueries, total outputs:", len(outputs))
         result: List[Dict[str, Union[str, List[str]]]] = []
         outputs_list = [output.outputs[0].text.strip() for output in outputs]
-        outputs_logprobs = [output.outputs[0].logprobs for output in outputs]
-
-
-
         print("test test finished")
-
-
-
-        # 遍历每个输出，同时获取其文本和对应的 logprobs
-        for i, subqueries_text in enumerate(outputs_list):
-            current_output_vllm_logprobs = outputs_logprobs[i] # 获取当前输出的 logprobs
-            
+        for output in outputs_list:
+            subqueries_text = output
             processed_item: Dict[str, Any] = {"type": "error", "message": "未找到有效模式"}
 
             # 构建一个大的正则表达式，匹配所有三种 JSON 格式中的任意一种。
@@ -423,34 +335,11 @@ class Generator:
                                 (parsed_json['subquery2'] or "").strip()
                             ]
                         }
-                    
                     elif json_type == "answer" and "answer" in parsed_json:
-
-
-                        answer_text = (str(parsed_json['answer']) or "").strip()
                         processed_item = {
                             "type": "answer",
-                            "answer": answer_text
+                            "answer": (str(parsed_json['answer']) or "").strip()
                         }
-                        # --- 新增功能：提取答案字符串的 logprobs ---
-                            # 准备传入 get_logprobs_for_matched_string 的数据
-                        model_output_data_for_logprobs = {
-                            "text": subqueries_text,
-                            # 直接传入 VLLM 原始的 logprobs 结构，函数内部会处理
-                            "logprobs": current_output_vllm_logprobs 
-                        }
-                        
-                        # 调用函数获取答案文本的 logprobs
-                        answer_logprobs_info = self.get_logprobs_for_matched_string(model_output_data_for_logprobs,answer_text)
-                        
-                        if answer_logprobs_info:
-                            answer_cumulative_logprob = answer_logprobs_info[0]['cumulative_logprob']
-                            confidence = math.e ** answer_cumulative_logprob if answer_cumulative_logprob is not None else None
-                            processed_item["confidence"] = confidence
-                        else:
-                            processed_item["confidence"] = 0
-
-
                     elif json_type == "entity" and "entity1" in parsed_json and "entity2" in parsed_json:
                         processed_item = {
                             "type": "entity",
@@ -582,17 +471,10 @@ class Generator:
                     
 
                 elif processed_results[idx].get("type") == "answer":
-                    answer = processed_results[idx]["answer"]
-
-                    if processed_results[idx].get("confidence") > self.config.threshold:
-                        node.type = "answer"  # 标记为答案节点
-                        node.query_answer = answer
-                        node.subqueries = []
-                    else:
-                        print(f"低置信度答案{answer}")
-                        node.type = "answer"  # 如果置信度较低，仍然标记为节点
-                        node.answer_again = "In the last round, the action you chose was to answer directly, but the confidence of your answer is very low, so please rethink your action."
-                        node_queue.append(node)  # 如果置信度较低，保留节点以便后续处理
+                    node.type = "answer"  # 标记为答案节点
+                    # 如果是直接答案，记录答案并跳过子查询生成
+                    node.query_answer = processed_results[idx]["answer"]
+                    node.subqueries = []
 
                 elif processed_results[idx].get("type") == "entity":
 
@@ -665,15 +547,15 @@ class Generator:
 
         # 保存评估结果
         result_path = self.config.output_dir + f"/{self.config.model_name}" +f"/{self.config.retriever_name}" +f"/{self.config.dataset_name}"
-        strategy.save_results(result_path, "tree", self.config.split, self.total_time, self.start_time, self.retrieval_num, apply_backoff=False)
+        strategy.save_results(result_path, "tree_wo_con", self.config.split, self.total_time, self.start_time, self.retrieval_num, apply_backoff=False)
         
 
 
         ##记录检索到的文档信息
         t =self.start_time.strftime("%m%d.%H:%M")
-        self.save_list_of_list_of_lists_to_jsonl(retrieval_info, result_path  + "/tree." + f"{self.config.split}." + f"{t}.context.jsonl")
+        self.save_list_of_list_of_lists_to_jsonl(retrieval_info, result_path  + "/tree_wo_con." + f"{self.config.split}." + f"{t}.context.jsonl")
 
-        ##记录树结构
+        # 记录树结构
         results = []
         for output, root in zip(outputs, root_nodes):
             result = {
@@ -686,7 +568,7 @@ class Generator:
             # 保存到JSONL文件
             try:
                 t=self.start_time.strftime("%m%d.%H:%M")
-                log_path= self.config.log_dir +f"/{self.config.model_name}"+f"/{self.config.dataset_name}"+f"/{t}._tree_query_tree.jsonl"
+                log_path= self.config.log_dir +f"/{self.config.model_name}"+f"/{self.config.dataset_name}"+f"/{t}._tree_wo_con_query_tree.jsonl"
                 os.makedirs(os.path.dirname(log_path), exist_ok=True)
                 with open(log_path, "a") as f:
                     for node in self._serialize_tree(root):
@@ -695,8 +577,8 @@ class Generator:
                 logger.warning(f"查询树节点记录失败: {e}")
 
 
-        ##记录子查询生成结果
-        jsonl_path = self.config.log_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"+f"/outputs"+ f"/{t}_tree_subqueries_outputs.jsonl"
+        # 记录子查询生成结果
+        jsonl_path = self.config.log_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"+f"/outputs"+ f"/{t}_tree_wo_con_subqueries_outputs.jsonl"
         os.makedirs(os.path.dirname(jsonl_path), exist_ok=True)
     
         try:
@@ -707,8 +589,8 @@ class Generator:
             logger.warning(f"子查询生成结果记录失败: {e}")
 
         
-        return output_list
-    
+        return [output.outputs[0].text for output in outputs]
+
     def _serialize_tree(self, root_node: ContextTreeNode) -> list:
         """非递归广度优先序列化所有节点"""
         from collections import deque
@@ -739,7 +621,7 @@ class Generator:
             tree = {
                 "query": node.query,
                 "answer": node.query_answer,
-                "context": "\n".join(f"[Doc {i+1}] {content}" for i, (_, content) in enumerate(node.context)) if node.type == "entity" or node.type == "answer" or node.depth == self.config.max_depth else "",
+                "context": "\n".join(f"[Doc {i+1}] {content}" for i, (_, content) in enumerate(node.context)) if node.type == "entity" or node.type == "answer" or node.depth == 3 else "",
                 "children": [build_tree(child) for child in node.children]
             }
             return tree
@@ -802,10 +684,9 @@ if __name__ == "__main__":
         all_decom_depth=args.all_decom_depth,
         threshold=args.threshold,
         output_dir=args.output_dir,
-        log_dir=args.log_dir,
-        seed = 3407)
+        log_dir=args.log_dir)
 
-    # os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+    # os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
     # os.environ['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
 
     # config = Config(

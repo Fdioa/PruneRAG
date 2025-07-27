@@ -204,7 +204,7 @@ class Generator:
             model=config.model_path,
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=0.90,
-            max_logprobs=32016,
+            max_model_len=40960,
             seed = config.seed)
 
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -266,7 +266,7 @@ class Generator:
     def process_data(self,data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         queries = [item['Question'] for item in data]
 
-        jsonl_path = f"/workspace/Search-R1/data/self_rag_context/{self.config.dataset_name}_retrieved_context_{self.config.retriever_name}.jsonl"
+        jsonl_path = f"/workspace/Search-R1/data/self_rag_context/{self.config.dataset_name}_retrieved_context_{self.config.retriever_name}_21.jsonl"
 
         if os.path.exists(jsonl_path):
             context = {}
@@ -1165,9 +1165,9 @@ if __name__ == "__main__":
     #     data_path="/workspace/Search-R1/config/dataset_paths.json",
     #     retriever_name="e5",
     #     retrieval_url="http://localhost:8000",
-    #     dataset_name="musique",
+    #     dataset_name="bamboogle",
     #     split="test",
-    #     topk=3,
+    #     topk=21,
     #     output_dir="./outputs",
     #     log_dir="./logs"
     # )

@@ -233,6 +233,7 @@ class Generator:
             # pipeline_parallel_size = torch.cuda.device_count(),
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=0.90,
+            max_model_len=40960,
             seed=config.seed)
         
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -251,10 +252,10 @@ class Generator:
 
         if 'qwen' in self.config.model_name:
             self.config.repetition_penalty = 1.05
-            self.config.max_tokens = 5120
+            self.config.max_tokens = 4096
         elif 'llama' in self.config.model_name:
             self.config.repetition_penalty = 1.0
-            self.config.max_tokens = 8192
+            self.config.max_tokens = 4096
 
     def prepare_prompts(self,filtered_data, dataset_name, model_path, MAX_SEARCH_LIMIT, subset_num=-1):
         
@@ -450,7 +451,7 @@ class Generator:
         documents: List[str],
         dataset_name: str,
         batch_output_records: List[Dict],  # New parameter to collect outputs
-        max_tokens: int = 32768,
+        max_tokens: int = 4096,
         coherent: bool = False,
     ) -> List[str]:
         
@@ -466,7 +467,7 @@ class Generator:
         output = self.llm.generate(
             prompts,
             sampling_params=SamplingParams(
-                max_tokens=max_tokens,
+                max_tokens=self.config.max_tokens,
                 # temperature=0,
                 temperature=self.config.temperature,
                 top_p=self.config.top_p,

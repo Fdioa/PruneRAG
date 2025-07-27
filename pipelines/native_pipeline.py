@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Any, Optional 
+from typing import List, Dict, Any, Optional ,Tuple
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 import torch
@@ -103,7 +103,7 @@ class Config:
                  temperature: float = 0.7,
                  top_k: int = 20,
                  top_p: float = 0.8,
-                 repetition_penalty: float = 1.05,
+                 repetition_penalty: float = 1.2,
                  output_dir: str = "./outputs",
                  seed: int = 3407):
         self.seed = seed
@@ -133,6 +133,7 @@ class Generator:
             model=config.model_path,
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=0.90,
+            max_model_len=40960,
             seed = config.seed)
 
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -143,10 +144,17 @@ class Generator:
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
+
         self.dataset_loader = DatasetLoader(self.config.data_path)
 
 
         self.prompt_template = get_native_instruction()
+
+        if 'qwen' in self.config.model_name:
+            self.config.max_tokens = 4096 # qwen3-8b的最大token数为4096
+
+        elif 'llama' in self.config.model_name:
+            self.config.max_tokens = 4096 # llama3-8b的最大token数为4096
 
 
     def generate(self, **sampling_params) -> List[str]:
@@ -159,16 +167,17 @@ class Generator:
         # 批量生成最终答案
 
         prompts = [self.prompt_template.format(question=query) for query in queries]
-        prompts = [{"role": "user", "content": up} for up in prompts]
-        prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True) for p in prompts]
-        
+        if self.config.model_name != "llama2-7b-hf":
+            prompts = [{"role": "user", "content": up} for up in prompts]
+            prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True) for p in prompts]
+            
         params = SamplingParams(
             max_tokens=self.config.max_tokens,
-            temperature=0,
-            # temperature=self.config.temperature,
-            # top_p=self.config.top_p,
-            # top_k=self.config.top_k,
-            # repetition_penalty=self.config.repetition_penalty,
+            # temperature=0,
+            temperature=self.config.temperature,
+            top_p=self.config.top_p,
+            top_k=self.config.top_k,
+            repetition_penalty=self.config.repetition_penalty,
         )
 
         start_time = datetime.now()
@@ -177,7 +186,7 @@ class Generator:
 
         output_list = [out_put.outputs[0].text for out_put in outputs]
 
-        
+        retrieval_info : List[List[List[Tuple[str, str]]]] = [[[('', '')]] for _ in range(500)]
        
         # 计算总耗时
         # total_time = (datetime.now() - self.start_time).total_seconds()
@@ -186,13 +195,14 @@ class Generator:
         strategy = EvaluationStrategyFactory.get_strategy(self.config.dataset_name)
 
         # 准备评估样本
-        strategy.prepare_samples(data, prompts, output_list)
+        strategy.prepare_samples(data, prompts, output_list, retrieval_info)
 
         # 保存评估结果
-        result_path = self.config.output_dir + f"/{self.config.model_name}" + f"/{self.config.dataset_name}"
-        strategy.save_results(result_path, "native", self.config.split, self.total_time, self.start_time, self.retrieval_num, apply_backoff=False)
+        # 保存评估结果
+        result_path = self.config.output_dir + f"/{self.config.model_name}" +f"/e5" +f"/{self.config.dataset_name}"
+        strategy.save_results(result_path, "naive", self.config.split, self.total_time, self.start_time, self.retrieval_num, apply_backoff=False)
         
-        return [output.outputs[0].text for output in outputs]
+        return 0
 
   
 if __name__ == "__main__":

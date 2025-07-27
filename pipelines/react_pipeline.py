@@ -202,6 +202,7 @@ class Generator:
             model=config.model_path,
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=0.90,
+            max_model_len=40960,
             seed = config.seed
             # max_model_len = 70000
             )
@@ -229,10 +230,10 @@ Here are an example.
 
         if 'qwen' in self.config.model_name:
             self.config.repetition_penalty = 1.05
-            self.config.max_tokens = 5120
+            self.config.max_tokens = 4096
         elif 'llama' in self.config.model_name:
             self.config.repetition_penalty = 1.0
-            self.config.max_tokens = 8192
+            self.config.max_tokens = 4096
 
 
     def step(self, env, action, retrieval_num):

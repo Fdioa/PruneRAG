@@ -102,8 +102,8 @@ def get_native_instruction():
     user_prompt = (
         '''
             Answer the following question:
-            You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.
             Question: {question}
+            IMPORTANT: You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.
             Answer:
         '''
     )
@@ -113,10 +113,10 @@ def get_rag_instruction():
     user_prompt = (
         '''
             Answer the following question:
-            "You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.
-            "You can use the following documents to help you answer the question.
-            "Documents: {context}
-            "Question: {question}
+            You can use the following documents to help you answer the question.
+            Documents: {context}
+            IMPORTANT: You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.
+            Question: {question}
         '''
     )
     return user_prompt
@@ -149,45 +149,126 @@ If the query contains only one entity information that needs to be clarified, ex
 ```json
 {{"type": "entity", "entity1": "...", "entity2": "..."}}
 ```
-
 ### Rules:
 Ignore information not relevant to the query in the Query_context.
 Only use "answer" when you are **100% sure** the answer is directly supported by the context.
 Ensure subquery1, subquery2, entity1, entity2, and answer in json format are all string values.
 The output must be a single JSON object inside a markdown code block.
 Please think carefully before making your choice.
-
-
+### Examples:
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844"}}
+```
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?"}}
+```
+**Example 3 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker"}}
+```
 ### Your Task:
 Query_context: {context}
+Parent_query of the Query: {parent_query}
 Query: {query}
 Output:
         '''
     )
     return user_prompt
 
+def get_subqueries_qwen3_8b_wo_ans():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Decomposition**
+If the Query cannot be directly answered,please split the query into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
+```
+2. **Entity Extraction**
+If the query contains only one entity information that needs to be clarified, extract the entity and express it as two entities from different perspectives, respond as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "..."}}
+```
+
+### Rules:
+Ignore information not relevant to the query in the Query_context.
+Ensure subquery1, subquery2, entity1, entity2 in json format are all string values.
+The output must be a single JSON object inside a markdown code block.
+Please think carefully before making your choice.
+
+
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+        '''
+    )
+    return user_prompt
+
+def get_subqueries_qwen3_8b_wo_ent():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "..."}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered,please split the query into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
+```
+
+### Rules:
+Ignore information not relevant to the query in the Query_context.
+Only use "answer" when you are **100% sure** the answer is directly supported by the context.
+Ensure subquery1, subquery2 and answer in json format are all string values.
+The output must be a single JSON object inside a markdown code block.
+Please think carefully before making your choice.
+
+
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+        '''
+    )
+    return user_prompt
 
 def get_subqueries_qwen3_8b_first():
     user_prompt = (
-        '''
-You are given a complex query and optional context. Your task is to decompose the query into two logically related sub-queries that together help answer the original query.
+'''
+You are given a query along with its parent question and optional context. Your task is to decompose the query into two logically related sub-queries.
 
-### What You Should Do:
-1. Understand the Question: Carefully read the Query and identify whether it compares two entities, requires checking attributes, or involves relationships.
-2. Decompose the Query: Split the Query into **two sub-queries**, each asking about one part or aspect of the original question.  
-   - Sub-queries must be logically related  
-   - Sub-queries must together allow answering the original question.
-3. Use Query_context if useful, but ignore irrelevant content.
-
-### Output Format:
-You must output your final answer in this strict JSON format (wrapped in a Markdown code block):
-```json  
+If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
 {{"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
 ```
-Where:
-- `subquery1` and `subquery2` are both **strings**
-- No nested JSON, no variables, no template markers like `{{}}` in the final output
-- Do not include any explanation outside the JSON block
+
+### Rules:
+Ignore information not relevant to the query in the Query_context.
+Ensure subquery1, subquery2 are all string values.
+The output must be a single JSON object inside a markdown code block.
+Do not provide any explanation or commentary outside the JSON.
 
 ### Your Task:
 Query_context: {context}
@@ -197,6 +278,21 @@ Output:
     )
 
     return user_prompt
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def get_final_answer_qwen3_8b():
@@ -221,30 +317,23 @@ For example, Question: What is the capital of France? Answer: \\boxed{{Paris}}.
 
 
 
-    return user_prompt
+
 
 
 def get_subqueries_llama3_8b_first():
     user_prompt = (
         '''
-You are given a complex query and optional context. Your task is to decompose the query into two logically related sub-queries that together help answer the original query.
+You are given a query along with its parent question and optional context. Your task is to decompose the query into two logically related sub-queries.
 
-### What You Should Do:
-1. Understand the Question: Carefully read the Query and identify whether it compares two entities, requires checking attributes, or involves relationships.
-2. Decompose the Query: Split the Query into **two sub-queries**, each asking about one part or aspect of the original question.  
-   - Sub-queries must be logically related  
-   - Sub-queries must together allow answering the original question.
-3. Use Query_context if useful, but ignore irrelevant content.
-
-### Output Format:
-You must output your final answer in this strict JSON format (wrapped in a Markdown code block):
-```json  
+If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
 {{"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
 ```
-Where:
-- `subquery1` and `subquery2` are both **strings**
-- No nested JSON, no variables, no template markers like `{{}}` in the final output
-- Do not include any explanation outside the JSON block
+### Rules:
+Ignore information not relevant to the query in the Query_context.
+Ensure subquery1, subquery2 are all string values.
+The output must be a single JSON object inside a markdown code block.
+Do not provide any explanation or commentary outside the JSON.
 
 ### Example:
 Query_context: ...
@@ -311,7 +400,6 @@ Ignore information not relevant to the query in the Query_context.
 Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
 The output must be a single JSON object inside a markdown code block.
 Do not provide any explanation or commentary outside the JSON.
-
 ### Examples:
 **Example 1 (Direct Answer):**
 Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
@@ -339,6 +427,7 @@ Output:
 ```
 ### Your Task:
 Query_context: {context}
+Parent_query of the Query: {parent_query}
 Query: {query}
 Output:
 
@@ -346,4 +435,100 @@ Output:
 
     return user_prompt
 
+def get_subqueries_llama3_8b_wo_ent():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "..."}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
+```
+### Rules:
+Only use "answer" when you are 100% sure the answer is directly supported by the context.
+Ignore information not relevant to the query in the Query_context.
+Ensure subquery1, subquery2 and answer are all string values.
+The output must be a single JSON object inside a markdown code block.
+Do not provide any explanation or commentary outside the JSON.
+### Examples:
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844"}}
+```
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?"}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
 
+''')
+    
+    return user_prompt
+
+
+
+
+def get_subqueries_llama3_8b_wo_ans():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Decomposition**
+If the Query can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
+```
+2. **Entity Extraction**
+If the Query lacks sufficient context to be decomposed, but contains key identifiable entities, extract them as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "..."}}
+```
+### Rules:
+Ignore information not relevant to the query in the Query_context.
+Ensure subquery1, subquery2, entity1, entity2 are all string values.
+The output must be a single JSON object inside a markdown code block.
+Do not provide any explanation or commentary outside the JSON.
+### Examples:
+**Example 1 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?"}}
+```
+**Example 2 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker"}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+
+''')
+
+    return user_prompt

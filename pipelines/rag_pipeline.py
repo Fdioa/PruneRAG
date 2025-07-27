@@ -191,6 +191,7 @@ class Generator:
             model=config.model_path,
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=0.90,
+            max_model_len=40960,
             seed = config.seed)
 
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -210,6 +211,14 @@ class Generator:
 
         self.root_node = ContextTreeNode("ROOT")
         self.current_nodes = [self.root_node]
+
+
+        if 'qwen' in self.config.model_name:
+            self.config.max_tokens = 4096 # qwen3-8b的最大token数为4096
+
+        elif 'llama' in self.config.model_name:
+            self.config.max_tokens = 4096 # llama3-8b的最大token数为4096
+
 
     
     def _retrieve_context(self, queries: List[str]) -> Dict[int, str]:
@@ -271,9 +280,10 @@ class Generator:
         prompts = [self.prompt_template.format(context= "\n".join(content for _, content in node.context), question=node.query) 
                   for node in root_nodes]
 
-        prompts = [{"role": "user", "content": up} for up in prompts]
-        prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True) for p in prompts]
-        
+        if self.config.model_name != "llama2-7b-hf":
+            prompts = [{"role": "user", "content": up} for up in prompts]
+            prompts = [self.tokenizer.apply_chat_template([p], tokenize=False, add_generation_prompt=True) for p in prompts]
+            
         params = SamplingParams(
             max_tokens=self.config.max_tokens,
             temperature=0,
