@@ -13,13 +13,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 dataset/*
-tensorflow/my_graph/*
 .idea/
 # C extensions
-*.so
-data
-sft/output/*
-sft/data/*
+
 
 # Distribution / packaging
 .Python
@@ -109,9 +105,6 @@ ENV/
 
 # Mac
 .DS_Store
-
-# output logs
-tests/e2e/toy_examples/deepspeed/synchronous/output.txt
 
 # vim
 *.swp

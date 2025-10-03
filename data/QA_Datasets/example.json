@@ -1,0 +1,36 @@
+[
+    {
+        "id": 0,
+        "Question": "Gary Groth is editor in chief of an American magazine of news and criticism pertaining to comic books, comic strips and graphic novels, as well as co-founder of what?",
+        "answer": [
+            "Fantagraphics Books"
+        ],
+        "golden_context": [
+            "Gary Groth\n Gary Groth (born 1954) is an American comic book editor, publisher and critic.  He is editor-in-chief of \"The Comics Journal\" and a co-founder of Fantagraphics Books.",
+            "The Comics Journal\n The Comics Journal, often abbreviated TCJ, is an American magazine of news and criticism pertaining to comic books, comic strips and graphic novels. Known for its lengthy interviews with comic creators, pointed editorials and scathing reviews of the products of the mainstream comics industry, the magazine promotes the view that comics are a fine art meriting broader cultural respect, and thus should be evaluated with higher critical standards."
+        ]
+    },
+    {
+        "id": 1,
+        "Question": "Are Travis Parrott and Menno Oosting both tennis players?",
+        "answer": [
+            "yes"
+        ],
+        "golden_context": [
+            "Travis Parrott\n Travis Parrott (born August 16, 1980 in Portland, Oregon) is an American professional ATP tennis doubles player.",
+            "Menno Oosting\n Menno Oosting (17 May 1964 – 22 February 1999) was a professional tennis player from the Netherlands, who won seven ATP Tour doubles titles out of 18 finals in his career."
+        ]
+    },
+
+    {
+        "id": 2,
+        "Question": "What is the capital of France?",
+        "answer": [
+            "Paris"
+        ],
+        "golden_context": [
+            "",
+            ""        
+        ]
+    }
+]
