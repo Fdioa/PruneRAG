@@ -246,31 +246,36 @@ class Generator:
         3. Formulate one self-contained subquery per facet
         4. Each subquery must:Focus on a single specific aspect.Be independently retrievable
         5. Output ONLY a JSON-formatted list of strings
-        - Example: {{"subquery1", "subquery2", "subquery3"}}
+        - Example: ["subquery1", "subquery2", "subquery3"]
 
         Example:
         Input: "How to improve heart health?"
-        Output: {{"Cardio exercises", "Heart-healthy diets"}}
+        Output: ["Cardio exercises", "Heart-healthy diets"]
 
-        Original Query: {query}
+        
         Retrieved Context:{context_str}
+        Original Query: {query}
+        Output ONLY a JSON-formatted list of strings.For example: ["subquery1", "subquery2", "subquery3", "subquery4", "subquery5"]
+        No additional explanation except for the subquery list
         Output:
         """
 
         self.subquery_template = """
         ## Instructions:
-        1. Break this facet into exactly {max_branches} more granular subfacets
-        2. Formulate one self-contained subquery per subfacet
-        3. Each subquery must:Explore a specific detail of this facet.Maintain connection to parent query
-        4. Output ONLY a JSON-formatted list of strings
-        - Example: {{"subquery1", "subquery2"}}
+        1. Break this facet into exactly {max_branches} more granular subfacets.
+        2. Formulate one self-contained subquery per subfacet.
+        3. Each subquery must:Explore a specific detail of this facet.Maintain connection to parent query.
+        4. Output ONLY a JSON-formatted list of strings.For example: ["subquery1", "subquery2"]
 
         Example:
         Input: "Cardio exercises"
-        Output: {{"Running benefits for heart", "Swimming techniques"}}
+        Output: ["Running benefits for heart", "Swimming techniques"]
 
-        Current: {query}
+        
         Retrieved Context: {context_str}
+        Current: {query}
+        Output ONLY a JSON-formatted list of strings.For example: ["subquery1", "subquery2", "subquery3", "subquery4", "subquery5"]
+        No additional explanation except for the subquery list
         Output:
         """
 
@@ -291,45 +296,89 @@ class Generator:
         return context_map
 
 
-    def build_retrieval_tree(self, root_query: str) -> ContextTreeNode:
+    def build_retrieval_trees(self, root_queries: List[str]) -> List[ContextTreeNode]:
         """构建检索树（核心方法）"""
-        root = ContextTreeNode(root_query)
-        root.context = self._retrieve_context([root_query])[0]
-        
-        # 递归构建树
-        self._expand_tree_node(root, depth=0)
-        return root
 
-    def _expand_tree_node(self, node: ContextTreeNode, depth: int):
-        """递归扩展树节点"""
-        if depth >= self.config.max_depth:
+        root_nodes = [ContextTreeNode(query, self.root_node) for query in root_queries]
+
+        context_map = self._retrieve_context(root_queries)
+
+        for i, root in enumerate(root_nodes):
+            root.context = context_map.get(i, [])
+
+        # 递归构建树
+        self._expand_tree_node(root_nodes, depth=1)
+
+        return root_nodes
+
+    def _expand_tree_node(self, nodes: List[ContextTreeNode], depth: int):
+        """层级扩展树节点，并递归地处理下一层"""
+        # 递归终止条件：达到最大深度
+        if depth > self.config.max_depth:
+            print(f"达到最大深度 {self.config.max_depth}，停止扩展。")
             return
         
-        # 生成子查询
-        subqueries = self._generate_subqueries_for_node(node)
+        print(f"\n--- 正在扩展深度: {depth}, 处理节点: {[n.query for n in nodes]} ---")
+
+        # 1. 生成子查询
+        subqueries_list = self._generate_subqueries_for_node(nodes)
         
-        for subq in subqueries:
-            # 验证子查询
-            if self._verify_subquery(node, subq):
-                child = ContextTreeNode(subq, parent=node)
-                child.context = self._retrieve_context([subq])[0]
-                node.children.append(child)
-                
-                # 递归扩展
-                self._expand_tree_node(child, depth+1)
+        # 2. 验证每个子查询的必要性和相关性
+        verified_subqueries = self._verify_subqueries(nodes, subqueries_list)
+
+        # 用于收集当前层级新添加的子节点，这些将是下一层扩展的父节点
+        next_level_nodes = []
+
+        # 3. 根据子查询的验证结果扩展树
+        for node, sub_q_inner_list, verified_results_inner_list in zip(nodes, subqueries_list, verified_subqueries):
+            if not sub_q_inner_list: # 如果没有子查询生成，跳过
+                print(f"节点 '{node.query}' 未生成子查询，跳过扩展。")
+                continue
+
+            for subq, is_valid in zip(sub_q_inner_list, verified_results_inner_list):
+                if is_valid:
+                    # 如果子查询通过验证 (必要性且相关性都为 True)
+                    child = ContextTreeNode(subq, parent=node)
+                    
+                    # 检索子查询的上下文
+                    # 请根据你的 _retrieve_context 实际返回类型进行调整 ([0]可能需要或不需要)
+                    child.context = self._retrieve_context([subq])[0] 
+                    
+                    # 将子节点添加到父节点的 children 列表中
+                    node.children.append(child)
+                    print(f"为节点 '{node.query}' 添加子节点: '{child.query}' (深度: {depth})")
+                    
+                    # 将新添加的子节点加入到下一层扩展队列
+                    next_level_nodes.append(child)
+                else:
+                    print(f"子查询 '{subq}' 未通过验证，未添加到 '{node.query}' 的子节点。")
+        
+        # 4. 递归调用：如果当前层有新的子节点被成功添加，则对这些新节点进行下一层的扩展
+        if next_level_nodes:
+            self._expand_tree_node(next_level_nodes, depth + 1)
+        else:
+            print(f"深度 {depth} 没有新的子节点被添加，停止此路径扩展。")
+
+            
     
-    def _generate_subqueries_for_node(self, node: ContextTreeNode) -> List[str]:
+    def _generate_subqueries_for_node(self, nodes: List[ContextTreeNode]) -> List[List[str]]:
         """为单个节点生成子查询"""
         # 根据节点深度选择模板
-        template = self.subquery_first_template if node.depth == 0 else self.subquery_template
+        template = self.subquery_first_template if nodes[0].depth == 1 else self.subquery_template
         
         # 准备提示词
-        context_str = "\n".join([f"[Doc {i+1}] {content}" for i, (_, content) in enumerate(node.context[:2])])
-        prompt = template.format(
+        # context_str = "\n".join([f"[Doc {i+1}] {content}" for i, (_, content) in enumerate(node.context[:2])])
+        # prompt = template.format(
+        #     query=node.query,
+        #     context_str=context_str,
+        #     max_branches=min(5, self.config.max_depth - node.depth)  # 限制最大分支数
+        # )
+
+        prompts = [template.format(
             query=node.query,
-            context=context_str,
-            max_branches=min(5, self.config.max_depth - node.depth)  # 限制最大分支数
-        )
+            context_str="\n".join([f"[Doc {i+1}] {content}" for i, (_, content) in enumerate(node.context[:2])]),
+            max_branches= 5  # 限制最大分支数
+        ) for node in nodes]
         
         # 调用LLM生成子查询
         params = SamplingParams(
@@ -340,40 +389,67 @@ class Generator:
         try:
 
             start_time = datetime.now()
-            output = self.llm.generate([prompt], params)[0]
+            outputs = self.llm.generate(prompts, params)
             self.total_time += (datetime.now() - start_time).total_seconds()
 
-            response = output.outputs[0].text.strip()
+            responses = [output.outputs[0].text.strip() for output in outputs]
             
             # 尝试解析JSON格式
-            try:
-                return json.loads(response)
-            except json.JSONDecodeError:
-                # 如果JSON解析失败，尝试提取引号内的内容
-                return [q.strip('"') for q in response.split('\n') if q.strip()][:5]
+            extracted_json_strings = []
+            parsed_subqueries_list = []
+            json_array_pattern = re.compile(r'\[\s*"(?:[^"\\]|\\.)*?"(?:\s*,\s*"(?:[^"\\]|\\.)*?")*\s*\]')
+
+            for response_str in responses:
+                match = json_array_pattern.search(response_str)
+                if match:
+                    extracted_json_str = match.group(0) # group(0) 返回整个匹配的字符串
+                    extracted_json_strings.append(extracted_json_str)
+                    print(f"提取到的 JSON 字符串: {extracted_json_str}")
+                    
+                    try:
+                        # 使用 json.loads() 安全地解析提取到的字符串
+                        parsed_array = json.loads(extracted_json_str)
+                        if isinstance(parsed_array, list):
+                            parsed_subqueries_list.append(parsed_array)
+                        else:
+                            # 理论上，如果正则匹配正确，这里应该总是 list，除非JSON本身是空的[]
+                            print(f"Warning: Extracted string was JSON but not a list: {extracted_json_str}")
+                            parsed_subqueries_list.append([])
+                    except json.JSONDecodeError as e:
+                        print(f"Error parsing extracted JSON string '{extracted_json_str}': {e}")
+                        parsed_subqueries_list.append([])
+                else:
+                    print(f"未在字符串中找到匹配的 JSON 数组: {response_str}")
+                    # 如果没有匹配到，你可以选择添加空列表或原字符串
+                    parsed_subqueries_list.append([]) 
+
+
+
+
+            return parsed_subqueries_list
+
         except Exception as e:
             logger.error(f"生成子查询失败: {e}")
             return []
 
-    def _verify_subquery(self, parent_node: ContextTreeNode, subquery: str) -> bool:
-        """两步验证子查询有效性"""
-        # 第一步: 必要性验证
-        necessity_prompt = f"""
+    def _verify_subqueries(self, parent_nodes: List[ContextTreeNode], subqueries: List[List[str]]) -> bool:
+        """
+        两步验证子查询有效性。
+        返回一个与 subqueries 形状相同的 List[List[bool]]，
+        表示每个子查询是否“必要且相关”。
+        """
+        necessity_prompt_template = """
         # Necessity Verification
-        Original Query: "{parent_node.query}"
-        Candidate Subquery: "{subquery}"
+        Original Query: {parent_query}
+        Candidate Subquery: {subquery}
 
         Question: Is this subquery necessary to comprehensively answer the original query?
-        Answer Requirement: Only output "Yes" or "No"
+        Answer Requirement: Only output "Yes" or "No".
         """
 
-        # 第二步: 相关性验证
-        passages = self._retrieve_context([subquery])[0]
-        context_str = "\n".join([f"[Doc {i+1}] {content}" for i, (_, content) in enumerate(passages[:2])])
-
-        relevance_prompt = f"""
+        relevance_prompt_template = """
         # Relevance Verification
-        Original Query: "{parent_node.query}"
+        Original Query: "{parent_query}"
         Subquery: "{subquery}"
         Retrieved Results:
         {context_str}
@@ -381,36 +457,115 @@ class Generator:
         Question: Are these passages relevant to the original query?
         Answer Requirement: Only output "Relevant" or "Irrelevant"
         """
+
+        # 1. 扁平化所有子查询并为必要性验证准备 prompts，同时记录原始结构信息
+        # 存储 (ContextTreeNode对象, 单个子查询字符串, 在扁平化列表中的原始索引)
+        flattened_subqueries_info = []
+        original_flat_idx = 0
+        total_subqueries_count = 0
+        for sub_q_list in subqueries:
+            total_subqueries_count += len(sub_q_list)
         
-        # 批量调用LLM进行验证
+        # 初始化一个与扁平化子查询数量相同的布尔列表，默认所有为 False
+        # 最终会根据必要性和相关性结果更新此列表
+        final_flat_results = [False] * total_subqueries_count
+
+        for node, sub_q_list in zip(parent_nodes, subqueries):
+            for individual_subquery in sub_q_list:
+                flattened_subqueries_info.append((node, individual_subquery, original_flat_idx))
+                original_flat_idx += 1
+
+        necessity_prompts = [
+            necessity_prompt_template.format(
+                parent_query=info[0].query,      # node.query
+                subquery=info[1]                 # individual_subquery
+            ) for info in flattened_subqueries_info
+        ]
+
         params = SamplingParams(
             max_tokens=self.config.max_tokens,
             temperature=0,
         )
         
         try:
-            # 必要性验证
+            # 2. 批量调用LLM进行必要性验证
             start_time = datetime.now()
-            necessity_output = self.llm.generate([necessity_prompt], params)[0]
+            necessity_outputs = self.llm.generate(necessity_prompts, params)
             self.total_time += (datetime.now() - start_time).total_seconds()
 
-            is_necessary = necessity_output.outputs[0].text.strip().lower() == "yes"
+            # 收集所有被认为是“必要”的子查询，以便进行相关性验证
+            # 存储 (ContextTreeNode对象, 单个子查询字符串, 在扁平化列表中的原始索引)
+            necessary_subqueries_for_relevance_check = []
             
-            if not is_necessary:
-                return False
-            
-            # 相关性验证
+            for i, output in enumerate(necessity_outputs):
+                is_necessary = output.outputs[0].text.strip().lower() == "yes"
+                current_subquery_info = flattened_subqueries_info[i] # 获取当前子查询的 (node, subquery_str, original_idx)
 
-            start_time = datetime.now()
-            relevance_output = self.llm.generate([relevance_prompt], params)[0]
-            self.total_time += (datetime.now() - start_time).total_seconds()
+                if is_necessary:
+                    # 如果必要，将其加入到等待相关性验证的队列
+                    necessary_subqueries_for_relevance_check.append(current_subquery_info)
+                    # 此时 final_flat_results[original_idx] 仍为 False，等待相关性结果更新
+                # else:
+                    # 如果不必要，则最终结果为 False (无需相关性检查，因为前提就不满足)
+                    # final_flat_results[original_subquery_info[2]] = False # 已经默认为False，此处可省略
 
-            is_relevant = relevance_output.outputs[0].text.strip().lower() == "relevant"
+            # 3. 为所有（最初的，扁平化的）子查询批量检索上下文
+            # 这样做可以确保上下文检索结果的索引与 flattened_subqueries_info 的索引一致
+            all_subqueries_for_retrieval = [info[1] for info in flattened_subqueries_info]
+            context_map = self._retrieve_context(all_subqueries_for_retrieval)
             
-            return is_relevant
+            # 4. 生成相关性验证的 prompts，只针对那些“必要”的子查询
+            relevance_prompts = []
+            # 存储必要性验证通过的子查询的原始扁平化索引，用于后续更新 final_flat_results
+            necessary_subquery_original_indices = []
+
+            for node_obj, individual_subquery, original_idx in necessary_subqueries_for_relevance_check:
+                # 使用 original_idx 从 context_map 中获取正确的检索结果
+                retrieved_passages = context_map[original_idx]
+                context_str = '\n'.join([f"[Doc {j+1}] {content}" for j, (_, content) in enumerate(retrieved_passages[:2])])
+                
+                relevance_prompts.append(
+                    relevance_prompt_template.format(
+                        parent_query=node_obj.query,
+                        subquery=individual_subquery,
+                        context_str=context_str
+                    )
+                )
+                necessary_subquery_original_indices.append(original_idx) # 记录下来，方便后续更新
+
+            # 5. 批量调用LLM进行相关性验证
+            if relevance_prompts: # 只有当有需要验证相关性的子查询时才调用LLM
+                start_time = datetime.now()
+                relevance_outputs = self.llm.generate(relevance_prompts, params)
+                self.total_time += (datetime.now() - start_time).total_seconds()
+
+                # 6. 根据相关性验证结果更新 final_flat_results
+                for i, output in enumerate(relevance_outputs):
+                    is_relevant = output.outputs[0].text.strip().lower() == "relevant"
+                    current_original_idx = necessary_subquery_original_indices[i]
+                    
+                    if is_relevant:
+                        # 如果必要且相关，则设置为 True
+                        final_flat_results[current_original_idx] = True
+                    # 否则，保持为 False (即：必要但不相关)
+            
+            # 7. 将扁平化的结果重新整形回原始的 List[List[bool]] 结构
+            reshaped_results = []
+            current_flat_idx_for_reshape = 0
+            for sub_q_list in subqueries: # 遍历原始 subqueries 的结构
+                row_results = []
+                for _ in sub_q_list: # 根据每个子列表的长度来取结果
+                    row_results.append(final_flat_results[current_flat_idx_for_reshape])
+                    current_flat_idx_for_reshape += 1
+                reshaped_results.append(row_results)
+            
+            return reshaped_results
+
         except Exception as e:
             logger.error(f"验证子查询失败: {e}")
-            return False
+            # 发生异常时，可以返回一个所有元素都是 False 的相同形状列表，或者根据需求决定
+            return [[False for _ in sublist] for sublist in subqueries]
+
 
     def synthesize_node(self, node: ContextTreeNode) -> str:
         """自底向上合成节点摘要"""
@@ -472,10 +627,10 @@ class Generator:
         queries = [item['Question'] for item in data]
 
         # 为每个查询构建检索树
-        trees = []
-        for query in queries:
-            tree = self.build_retrieval_tree(query)
-            trees.append(tree)
+
+
+        trees = self.build_retrieval_trees(queries)
+
 
         # 自底向上合成摘要
         summaries = []
@@ -548,6 +703,32 @@ class Generator:
             queue.extend(current.children)
         return nodes_list
     
+    def collect_contexts_per_level(self, nodes: List[ContextTreeNode]) -> List[List[List[Tuple[str, str]]]]:
+        """
+        对每棵树进行层级遍历，返回每层的节点context，格式为 List[List[List[Tuple[str, str]]]]
+        """
+
+        all_tree_levels = []
+
+        for root in nodes:
+            queue = deque([root])
+            levels = []
+
+            while queue:
+                level_size = len(queue)
+                current_level = []
+
+                for _ in range(level_size):
+                    node = queue.popleft()
+                    current_level.extend(node.context)
+                    queue.extend(node.children)
+
+                levels.append(current_level)
+
+            all_tree_levels.append(levels)
+
+        return all_tree_levels
+    
         
     def save_list_of_list_of_lists_to_jsonl(self, data: List[List[List[Tuple[str, str]]]], filename: str):
         with open(filename, 'w', encoding='utf-8') as f:
@@ -585,8 +766,8 @@ if __name__ == "__main__":
         retrieval_url="http://localhost:8000",
         dataset_name="example",
         split="test",
-        topk=3,
-        max_depth=3,
+        topk=5,
+        max_depth=2,
         all_decom_depth=0,
         output_dir="./outputs",
         log_dir="./logs"

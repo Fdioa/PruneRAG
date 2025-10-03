@@ -8,17 +8,36 @@ import concurrent.futures
 import json ,re, argparse
 from datetime import datetime
 import os,sys
+
+# 1. 获取当前脚本的绝对路径 (e.g., /workspace/QDT-RAG/pipelines/tree_pipeline.py)
+current_script_path = os.path.abspath(__file__)
+
+# 2. 获取当前脚本所在目录 (e.g., /workspace/QDT-RAG/pipelines)
+current_dir = os.path.dirname(current_script_path)
+
+# 3. 获取项目根目录 (e.g., /workspace/QDT-RAG)
+# 假设项目根目录是当前脚本目录的父目录
+project_root = os.path.dirname(current_dir)
+
+# 4. 将项目根目录添加到Python的模块搜索路径的开头
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+print(current_dir)
+
 from scripts.data_loader import DatasetLoader
 from scripts.evaluater import EvaluationStrategyFactory
 from scripts.seed import setup_seed
 from scripts.search.retrieval_client import RetrievalClient, QueryRequest
-from prompts import (
+from scripts.prompts import (
                     get_subqueries_qwen3_8b,
                     get_subqueries_qwen3_8b_first,
                     get_final_answer_qwen3_8b,
                     get_subqueries_llama3_8b_first,
                     get_subqueries_llama3_8b,
-                    get_final_answer_llama3_8b)
+                    get_final_answer_llama3_8b,
+                    get_final_answer_llama3_8b_multi_choice,
+                    get_final_answer_qwen3_8b_multi_choice)
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +69,7 @@ def parse_args():
     parser.add_argument(
         '--data_path',
         type=str,
-        default="/workspace/Search-R1/config/dataset_paths.json",
+        default="/workspace/QDT-RAG/config/dataset_paths.json",
         help="数据集路径"
     )
 
@@ -157,10 +176,10 @@ def parse_args():
 
 class Config:
     def __init__(self, 
-                 model_path: str = "/workspace/Search-R1/models",
+                 model_path: str = "/workspace/QDT-RAG/models",
                  retriever_name: str = "e5",
                  retrieval_url: str = "http://localhost:8000",
-                 data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
+                 data_path: str = "/workspace/QDT-RAG/config/dataset_paths.json",
                  dataset_name: str = "2wiki",
                  split: str = "test",
                  topk: int = 3,
@@ -248,12 +267,25 @@ class Generator:
             self.answer_template = get_final_answer_qwen3_8b()
             self.config.max_tokens = 4096 # qwen3-8b的最大token数为4096
             self.logprobs_size = 100
+            if self.config.dataset_name in ['gpqa','math500','aime','amc','livecode']:
+                self.answer_template = get_final_answer_qwen3_8b_multi_choice()
+                self.config.max_tokens = 20480
         elif 'llama' in self.config.model_name:
             self.subquery_first_template = get_subqueries_llama3_8b_first()
             self.subquery_template = get_subqueries_llama3_8b()
             self.answer_template = get_final_answer_llama3_8b()
             self.config.max_tokens = 4096 # llama3-8b的最大token数为4096
             self.logprobs_size = 100
+            if self.config.dataset_name in ['gpqa','math500','aime','amc','livecode']:
+                self.answer_template = get_final_answer_llama3_8b_multi_choice()
+                self.config.max_tokens = 8192
+
+        if self.config.dataset_name in ['gpqa','math500','aime','amc','livecode']:
+            if 'llama' in self.config.model_name:
+                self.config.max_tokens = 8192 # llama3-8b的最大token数为8192
+            if 'qwen' in self.config.model_name:
+                self.config.max_tokens = 20480 # qwen3-8b的最大token数为20480
+
 
 
     # --- 核心函数：从完整文本和 logprobs 中提取特定字符串的 logprobs ---
@@ -261,7 +293,7 @@ class Generator:
     def get_logprobs_for_matched_string(self, model_output_data: Dict[str, Any], target_string: str) -> List[Dict[str, Any]]:
         full_text = model_output_data["text"]
         # 这里的 token_logprobs 是 List[TokenLogprobsDict]
-        vllm_logprobs_list_of_dicts = model_output_data["logprobs"] 
+        vllm_logprobs_list_of_dicts = model_output_data["logprobs"]
 
         # --- 关键修改：从 VLLM 的 logprobs 结构中提取实际生成的 token 及其 logprob ---
         processed_token_logprobs = []
@@ -314,7 +346,7 @@ class Generator:
             if start_token_idx != -1 and end_token_idx != -1:
                 matched_tokens = processed_token_logprobs[start_token_idx : end_token_idx + 1]
 
-            cumulative_logprob = sum(t['logprob'] for t in matched_tokens) if matched_tokens else 0
+            cumulative_logprob = sum(t['logprob'] for t in matched_tokens) / len(matched_tokens) if matched_tokens else 0
 
             results.append({
                 "matched_string": target_string,
@@ -583,13 +615,13 @@ class Generator:
 
                 elif processed_results[idx].get("type") == "answer":
                     answer = processed_results[idx]["answer"]
-
-                    if processed_results[idx].get("confidence") > self.config.threshold:
+                    confidence = processed_results[idx].get("confidence")
+                    if confidence > self.config.threshold:
                         node.type = "answer"  # 标记为答案节点
                         node.query_answer = answer
                         node.subqueries = []
                     else:
-                        print(f"低置信度答案{answer}")
+                        print(f"低置信度答案{answer},置信度为{confidence}")
                         node.type = "answer"  # 如果置信度较低，仍然标记为节点
                         node.answer_again = "In the last round, the action you chose was to answer directly, but the confidence of your answer is very low, so please rethink your action."
                         node_queue.append(node)  # 如果置信度较低，保留节点以便后续处理
@@ -789,39 +821,41 @@ if __name__ == "__main__":
 
 
 
-    args = parse_args()
-    config = Config(
-        model_path=args.model_path,
-        data_path=args.data_path,
-        retriever_name=args.retriever_name,
-        retrieval_url=args.retrieval_url,
-        dataset_name=args.dataset_name,
-        split=args.split,
-        topk=args.topk,
-        max_depth=args.max_depth,
-        all_decom_depth=args.all_decom_depth,
-        threshold=args.threshold,
-        output_dir=args.output_dir,
-        log_dir=args.log_dir,
-        seed = 3407)
-
-    # os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
-    # os.environ['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
-
+    # args = parse_args()
     # config = Config(
-    #     model_path="/workspace/Search-R1/models/llama-3.1-8b-instruct",
-    #     data_path="/workspace/Search-R1/config/dataset_paths.json",
-    #     retriever_name="bge",
-    #     retrieval_url="http://localhost:8000",
-    #     dataset_name="example",
-    #     split="test",
-    #     topk=3,
-    #     max_depth=3,
-    #     all_decom_depth=0,
-    #     output_dir="./outputs",
-    #     log_dir="./logs"
+    #     model_path=args.model_path,
+    #     data_path=args.data_path,
+    #     retriever_name=args.retriever_name,
+    #     retrieval_url=args.retrieval_url,
+    #     dataset_name=args.dataset_name,
+    #     split=args.split,
+    #     topk=args.topk,
+    #     max_depth=args.max_depth,
+    #     all_decom_depth=args.all_decom_depth,
+    #     threshold=args.threshold,
+    #     output_dir=args.output_dir,
+    #     log_dir=args.log_dir,
+    #     seed = 3407)
 
-    # )
+    os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
+    os.environ['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
+
+    config = Config(
+        model_path="/workspace/QDT-RAG/models/llama-3.1-8b-instruct",
+        data_path="/workspace/QDT-RAG/config/dataset_paths.json",
+        retriever_name="e5",
+        retrieval_url="http://localhost:8000",
+        dataset_name="2wiki",
+        split="test",
+        topk=5,
+        max_depth=3,
+        all_decom_depth=0,
+        threshold=0.95,
+        output_dir="./outputs",
+        log_dir="./logs",
+        seed = 3407
+
+    )
 
 
     generator = Generator(config)

@@ -34,7 +34,7 @@ class EvaluationUtils:
             else:
                 extracted_text = "No helpful information found."
         else:
-            pattern = r'\\boxed\{(.*)\}'
+            pattern = r'\\boxed\{(.*?)\}'
             matches = re.findall(pattern, output)
             if matches:
                 extracted_text = matches[-1]
@@ -152,6 +152,38 @@ class EvaluationUtils:
                 final_metric['forget'] = 1
 
             # final_metric['forget'] = int(forget)
+        elif mode == 'choose':
+            normalized_pred = EvaluationUtils.normalize_answer(pred_answer)
+            for answer in labeled_answer:
+                normalized_gt = EvaluationUtils.normalize_answer(answer)
+                em = int(normalized_pred == normalized_gt)
+                acc = int(normalized_gt in normalized_pred)
+                
+                pred_tokens = normalized_pred.split()
+                gt_tokens = normalized_gt.split()
+                common = Counter(pred_tokens) & Counter(gt_tokens)
+                num_same = sum(common.values())
+                
+                if num_same == 0:
+                    continue
+                precision = 1.0 * num_same / len(pred_tokens)
+                recall = 1.0 * num_same / len(gt_tokens)
+                f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) else 0
+                
+                
+
+                for k in ["em", "acc", "f1"]:
+                    final_metric[k] = max(eval(k), final_metric[k])
+            label_in = is_labeled_context_tokenwise_matched(context, labled_context)
+
+            if label_in:
+                final_metric['label_in'] = 1
+
+            if label_in and em == 0:
+                final_metric['forget'] = 1
+
+            # final_metric['forget'] = int(forget)
+
         
         return final_metric, pred_answer
 
@@ -188,6 +220,7 @@ class GeneralEvaluationStrategy(BaseEvaluationStrategy):
     def _get_info(self, item):
         if self.dataset_name in ['gpqa', 'medmcqa']:
                 labeled_answer = item["Correct Choice"]
+                labeled_context = item["golden_context"]
                 # labeled_choice_answer = item["Correct Answer"]
                 mode = 'choose'
         elif self.dataset_name in ['math500', 'aime', 'amc']:
@@ -217,9 +250,11 @@ class GeneralEvaluationStrategy(BaseEvaluationStrategy):
             self.metrics_data['num_valid_answer'] += 1
 
         if self.dataset_name == 'gpqa':
-            domain = item.get("domain", "Unknown")
+            domain = item.get("High-level domain", "Unknown")
             for key in ['em', 'acc', 'f1', 'math_equal']:
                 self.metrics_data['domain_metrics'][domain][key].append(metric[key])
+
+            self.metrics_data['domain_metrics'][domain]['total'] += 1
             if my_method_valid:
                 self.metrics_data['domain_metrics'][domain]['num_valid'] += 1
 
@@ -334,7 +369,7 @@ class EvaluationStrategyFactory:
 
 
 if __name__ == "__main__":
-    path = "/workspace/Search-o1/outputs/runs.qa/2wiki.qwq.search_o1/test.4.15,9:3.json"
+    path = "/workspace/QDT-RAG/outputs/runs.qa/2wiki.qwq.search_o1/test.4.15,9:3.json"
     dataset_name = "2wiki"
 
     with open(path, mode='r', encoding='utf-8') as file:
