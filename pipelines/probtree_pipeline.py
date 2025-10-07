@@ -11,13 +11,13 @@ import json ,re, argparse
 from datetime import datetime
 import os,sys
 
-# 1. 获取当前脚本的绝对路径 (e.g., /workspace/QDT-RAG/pipelines/tree_pipeline.py)
+# 1. 获取当前脚本的绝对路径 
 current_script_path = os.path.abspath(__file__)
 
-# 2. 获取当前脚本所在目录 (e.g., /workspace/QDT-RAG/pipelines)
+# 2. 获取当前脚本所在目录 
 current_dir = os.path.dirname(current_script_path)
 
-# 3. 获取项目根目录 (e.g., /workspace/QDT-RAG)
+# 3. 获取项目根目录 
 # 假设项目根目录是当前脚本目录的父目录
 project_root = os.path.dirname(current_dir)
 
@@ -71,7 +71,7 @@ def parse_args():
     parser.add_argument(
         '--data_path',
         type=str,
-        default="/workspace/QDT-RAG/config/dataset_paths.json",
+        default="./config/dataset_paths.json",
         help="数据集路径"
     )
 
@@ -161,8 +161,8 @@ def parse_args():
 
 class Config:
     def __init__(self, 
-                 model_path: str = "/workspace/QDT-RAG/models",
-                 data_path: str = "/workspace/QDT-RAG/config/dataset_paths.json",
+                 model_path: str = "./models",
+                 data_path: str = "./config/dataset_paths.json",
                  retriever_name: str = "e5",
                  retrieval_url: str = "http://localhost:8000",
                  dataset_name: str = "2wiki",

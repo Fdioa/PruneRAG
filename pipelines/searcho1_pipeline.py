@@ -14,11 +14,12 @@ from scripts.evaluater import EvaluationStrategyFactory,EvaluationUtils
 from scripts.seed import setup_seed
 from scripts.search.retrieval_client import RetrievalClient, QueryRequest
 
-from prompts import (
+from scripts.prompts import (
     get_singleqa_search_o1_instruction, 
     get_multiqa_search_o1_instruction, 
     get_webpage_to_reasonchain_instruction,
-    get_task_instruction_openqa, 
+    get_task_instruction_openqa,
+    get_gpqa_search_o1_instruction
 )
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,7 @@ def parse_args():
     parser.add_argument(
         '--data_path',
         type=str,
-        default="/workspace/Search-R1/config/dataset_paths.json",
+        default="./config/dataset_paths.json",
         help="数据集路径"
     )
 
@@ -167,10 +168,10 @@ def parse_args():
 
 class Config:
     def __init__(self, 
-                 model_path: str = "/workspace/Search-R1/models",
+                 model_path: str = "./models",
                  retriever_name: str = "e5",
                  retrieval_url: str = "http://localhost:8000",
-                 data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
+                 data_path: str = "./config/dataset_paths.json",
                  dataset_name: str = "2wiki",
                  split: str = "test",
                  topk: int = 3,
@@ -257,17 +258,25 @@ class Generator:
             self.config.repetition_penalty = 1.0
             self.config.max_tokens = 4096
 
+        if self.config.dataset_name in ['gpqa','math500','aime','amc','livecode']:
+            if 'llama' in self.config.model_name:
+                self.config.max_tokens = 8192 # llama3-8b的最大token数为8192
+            if 'qwen' in self.config.model_name:
+                self.config.max_tokens = 20480 # qwen3-8b的最大token数为20480
+
     def prepare_prompts(self,filtered_data, dataset_name, model_path, MAX_SEARCH_LIMIT, subset_num=-1):
         
         input_list = []
         for item in filtered_data:
             question = item['Question']
 
-            if dataset_name in ['nq', 'triviaqa', 'hotpotqa', 'musique', 'bamboogle', '2wiki']:
+            if dataset_name in ['nq', 'triviaqa', 'hotpotqa', 'musique', 'bamboogle', '2wiki', 'gpqa']:
                 if dataset_name in ['nq', 'triviaqa']:
                     instruction = get_singleqa_search_o1_instruction(MAX_SEARCH_LIMIT)
                 elif dataset_name in ['hotpotqa', 'musique', 'bamboogle', '2wiki']:
                     instruction = get_multiqa_search_o1_instruction(MAX_SEARCH_LIMIT)
+                elif dataset_name in ['gpqa']:
+                    instruction = get_gpqa_search_o1_instruction(MAX_SEARCH_LIMIT)
                 if 'qwq' in model_path.lower():
                     user_prompt = get_task_instruction_openqa(question, model_name='qwq')
                 else:
@@ -692,8 +701,8 @@ if __name__ == "__main__":
     # os.environ['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
 
     # config = Config(
-    #     model_path="/workspace/Search-R1/models/llama-3.1-8b-instruct",
-    #     data_path="/workspace/Search-R1/config/dataset_paths.json",
+    #     model_path="./models/llama-3.1-8b-instruct",
+    #     data_path="./config/dataset_paths.json",
     #     retriever_name="bge",
     #     retrieval_url="http://localhost:8000",
     #     dataset_name="example",

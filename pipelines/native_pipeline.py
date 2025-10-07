@@ -27,7 +27,7 @@ def parse_args():
     parser.add_argument(
         '--data_path',
         type=str,
-        default="/workspace/Search-R1/config/dataset_paths.json",
+        default="./config/dataset_paths.json",
         help="数据集路径"
     )
 
@@ -95,8 +95,8 @@ def parse_args():
 
 class Config:
     def __init__(self, 
-                 model_path: str = "/workspace/Search-R1/models",
-                 data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
+                 model_path: str = "./models",
+                 data_path: str = "./config/dataset_paths.json",
                  dataset_name: str = "2wiki",
                  split: str = "test",
                  max_tokens: int = 10240,

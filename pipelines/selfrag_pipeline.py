@@ -22,7 +22,7 @@ from scripts.data_loader import DatasetLoader
 from scripts.evaluater import EvaluationStrategyFactory
 from scripts.seed import setup_seed
 from scripts.search.retrieval_client import RetrievalClient, QueryRequest
-from prompts import get_rag_instruction
+from scripts.prompts import get_rag_instruction
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def parse_args():
     parser.add_argument(
         '--data_path',
         type=str,
-        default="/workspace/Search-R1/config/dataset_paths.json",
+        default="./config/dataset_paths.json",
         help="数据集路径"
     )
 
@@ -144,8 +144,8 @@ def parse_args():
 
 class Config:
     def __init__(self, 
-                 model_path: str = "/workspace/Search-R1/models",
-                 data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
+                 model_path: str = "./models",
+                 data_path: str = "./config/dataset_paths.json",
                  retriever_name: str = "e5",
                  retrieval_url: str = "http://localhost:8000",
                  dataset_name: str = "2wiki",
@@ -204,7 +204,9 @@ class Generator:
             model=config.model_path,
             tensor_parallel_size=torch.cuda.device_count(),
             gpu_memory_utilization=0.90,
-            max_model_len=40960,
+            # max_model_len=40960,
+            max_logprobs=32016,
+
             seed = config.seed)
 
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -246,7 +248,7 @@ class Generator:
             context_map[idx] = context
 
         # 保存为 JSONL 文件
-        # jsonl_path = f"/workspace/Search-R1/data/self_rag_context/{self.config.dataset_name}_retrieved_context.jsonl"
+        # jsonl_path = f"./data/self_rag_context/{self.config.dataset_name}_retrieved_context.jsonl"
         # 确保保存路径的上级目录存在
         os.makedirs(os.path.dirname(jsonl_path), exist_ok=True)
 
@@ -266,7 +268,7 @@ class Generator:
     def process_data(self,data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         queries = [item['Question'] for item in data]
 
-        jsonl_path = f"/workspace/Search-R1/data/self_rag_context/{self.config.dataset_name}_retrieved_context_{self.config.retriever_name}_21.jsonl"
+        jsonl_path = f"./data/self_rag_context/{self.config.dataset_name}_retrieved_context_{self.config.retriever_name}_5.jsonl"
 
         if os.path.exists(jsonl_path):
             context = {}
@@ -275,6 +277,8 @@ class Generator:
                     entry = json.loads(line)
                     query_id = entry["id"]
                     context[query_id] = entry["context"]
+
+            print(f"Loaded retrieved context from {jsonl_path}.")
         else:
             context = self._retrieve_context(queries, jsonl_path)
 
@@ -401,7 +405,7 @@ class Generator:
         if paragraphs is not None:
             aug_prompts = [prompt + "[Retrieval]" + "<paragraph>{}</paragraph>".format(
                 paragraph) for paragraph in paragraphs]
-            self.retrieval_num += 1
+            self.retrieval_num += 2
         else:
             aug_prompts = [prompt]
 
@@ -1159,15 +1163,15 @@ if __name__ == "__main__":
         log_dir=args.log_dir
     )
 
-    # os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+    # os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
     # config = Config(
     #     model_path="/workspace/self-rag/model",
-    #     data_path="/workspace/Search-R1/config/dataset_paths.json",
+    #     data_path="./config/dataset_paths.json",
     #     retriever_name="e5",
     #     retrieval_url="http://localhost:8000",
     #     dataset_name="bamboogle",
     #     split="test",
-    #     topk=21,
+    #     topk=5,
     #     output_dir="./outputs",
     #     log_dir="./logs"
     # )

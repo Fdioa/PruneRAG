@@ -12,7 +12,7 @@ from scripts.data_loader import DatasetLoader
 from scripts.evaluater import EvaluationStrategyFactory
 from scripts.seed import setup_seed
 from scripts.search.retrieval_client import RetrievalClient, QueryRequest
-from prompts import get_rag_instruction
+from scripts.prompts import get_rag_instruction
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def parse_args():
     parser.add_argument(
         '--data_path',
         type=str,
-        default="/workspace/Search-R1/config/dataset_paths.json",
+        default="./config/dataset_paths.json",
         help="数据集路径"
     )
 
@@ -135,8 +135,8 @@ def parse_args():
 
 class Config:
     def __init__(self, 
-                 model_path: str = "/workspace/Search-R1/models",
-                 data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
+                 model_path: str = "./models",
+                 data_path: str = "./config/dataset_paths.json",
                  retriever_name: str = "e5",
                  retrieval_url: str = "http://localhost:8000",
                  dataset_name: str = "2wiki",
@@ -218,6 +218,13 @@ class Generator:
 
         elif 'llama' in self.config.model_name:
             self.config.max_tokens = 4096 # llama3-8b的最大token数为4096
+
+        if self.config.dataset_name in ['gpqa','math500','aime','amc','livecode']:
+            self.prompt_template = get_rag_instruction(multi_choice=True)
+            if 'llama' in self.config.model_name:
+                self.config.max_tokens = 8192 # llama3-8b的最大token数为8192
+            if 'qwen' in self.config.model_name:
+                self.config.max_tokens = 20480 # qwen3-8b的最大token数为8192
 
 
     
@@ -401,18 +408,30 @@ if __name__ == "__main__":
     print("Starting rag pipeline...\n Time:", datetime.now())
 
     setup_seed(3407)
-    args = parse_args()
-    # 测试用例
+    # args = parse_args()
+    # # 测试用例
+    # config = Config(
+    #     model_path=args.model_path,
+    #     data_path=args.data_path,
+    #     retriever_name=args.retriever_name,
+    #     retrieval_url=args.retrieval_url,
+    #     dataset_name=args.dataset_name,
+    #     split=args.split,
+    #     topk=args.topk,
+    #     output_dir=args.output_dir,
+    #     log_dir=args.log_dir
+    # )
+
     config = Config(
-        model_path=args.model_path,
-        data_path=args.data_path,
-        retriever_name=args.retriever_name,
-        retrieval_url=args.retrieval_url,
-        dataset_name=args.dataset_name,
-        split=args.split,
-        topk=args.topk,
-        output_dir=args.output_dir,
-        log_dir=args.log_dir
+        model_path="./models/llama-3.1-8b-instruct",
+        data_path="./config/dataset_paths.json",
+        retriever_name="bge",
+        retrieval_url="http://localhost:8000",
+        dataset_name="2wiki",
+        split="test",
+        topk=5,
+        output_dir="./outputs",
+        log_dir="./logs"
     )
 
 

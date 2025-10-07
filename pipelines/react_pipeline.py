@@ -47,7 +47,7 @@ def parse_args():
     parser.add_argument(
         '--data_path',
         type=str,
-        default="/workspace/Search-R1/config/dataset_paths.json",
+        default="./config/dataset_paths.json",
         help="数据集路径"
     )
 
@@ -144,8 +144,8 @@ def parse_args():
 
 class Config:
     def __init__(self, 
-                 model_path: str = "/workspace/Search-R1/models/llama-3.1-8b-instruct",
-                 data_path: str = "/workspace/Search-R1/config/dataset_paths.json",
+                 model_path: str = "./models/llama-3.1-8b-instruct",
+                 data_path: str = "./config/dataset_paths.json",
                  retriever_name: str = "e5",
                  retrieval_url: str = "http://localhost:8000",
                  dataset_name: str = "2wiki",
@@ -465,8 +465,8 @@ if __name__ == "__main__":
     # os.environ['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
 
     # config = Config(
-    #     model_path="/workspace/Search-R1/models/llama-3.1-8b-instruct",
-    #     data_path="/workspace/Search-R1/config/dataset_paths.json",
+    #     model_path="./models/llama-3.1-8b-instruct",
+    #     data_path="./config/dataset_paths.json",
     #     retriever_name="bge",
     #     retrieval_url="http://localhost:8000",
     #     dataset_name="example",
