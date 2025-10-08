@@ -26,19 +26,24 @@ Tree-RAG supports the following datasets out of the box:
 
 ## Getting Started
 
-To run the Tree-RAG system, you can use the provided shell scripts:
+To run the PruneRAG system, follow these steps:
 
+1. First, start the retrieval service:
 ```bash
-# Run the main Tree-RAG pipeline
-./run_tree.sh
+# Launch the retrieval server
+./lanuch_retriever.sh
+```
 
-# Run baseline models for comparison
+2. Then, evaluate baseline models for comparison:
+```bash
+# Run baseline models
 ./run_baselines.sh
+```
 
-# Run experiments with different parameters
-./run_tree_scale.sh
-./run_tree_threshold.sh
-./run_tree_topk.sh
+3. Finally, run the PruneRAG system:
+```bash
+# Run the PruneRAG system
+./run_prunerag.sh
 ```
 
 ## Prompts Examples
@@ -60,7 +65,6 @@ Below are the prompt examples used in the Tree-RAG framework (located in the fig
 
 ## License
 
-[Add license information here]
 
 ## Acknowledgements
 

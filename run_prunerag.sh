@@ -4,17 +4,17 @@ export CUDA_VISIBLE_DEVICES=0,1
 export VLLM_WORKER_MULTIPROC_METHOD=spawn
 
 
-CONFIG_PATH="/workspace/Search-R1/config/dataset_paths.json"
+CONFIG_PATH="./config/dataset_paths.json"
 
 RETRIEVER_NAME="bge"
 TOPK=5
 
 
-MODEL_PATH="/workspace/Search-R1/models/llama-3.1-8b-instruct"
+MODEL_PATH="./models/llama-3.1-8b-instruct"
 ##############################-----hotpotqa-----######################################
 DATASET_NAME="hotpotqa"
 
-python ./pipelines/tree_pipeline.py \
+python -m pipelines.tree_pipeline \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -31,7 +31,26 @@ python ./pipelines/tree_pipeline.py \
 ##############################-----musique-----######################################
 DATASET_NAME="musique"
 
-python ./pipelines/tree_pipeline.py \
+python -m pipelines.tree_pipeline \
+    --model_path $MODEL_PATH \
+    --retriever_name $RETRIEVER_NAME \
+    --retrieval_url "http://localhost:8000" \
+    --data_path $CONFIG_PATH \
+    --dataset_name $DATASET_NAME \
+    --split "test" \
+    --topk $TOPK \
+    --max_depth 3 \
+    --all_decom_depth 0 \
+    --threshold 0.95 \
+    --output_dir "./outputs" \
+    --log_dir "./logs"
+
+
+
+##############################-----2wiki-----######################################
+DATASET_NAME="2wiki"
+
+python -m pipelines.tree_pipeline \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -48,7 +67,7 @@ python ./pipelines/tree_pipeline.py \
 ##############################-----bamboogle-----######################################
 DATASET_NAME="bamboogle"
 
-python ./pipelines/tree_pipeline.py \
+python -m pipelines.tree_pipeline \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -62,11 +81,10 @@ python ./pipelines/tree_pipeline.py \
     --output_dir "./outputs" \
     --log_dir "./logs"
 
+################################-----gpqa-----######################################
+DATASET_NAME="gpqa"
 
-##############################-----2wiki-----######################################
-DATASET_NAME="2wiki"
-
-python ./pipelines/tree_pipeline.py \
+python -m pipelines.tree_pipeline \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -79,8 +97,6 @@ python ./pipelines/tree_pipeline.py \
     --threshold 0.95 \
     --output_dir "./outputs" \
     --log_dir "./logs"
-
-
 
 
 
