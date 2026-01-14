@@ -63,6 +63,18 @@ Below are the prompt examples used in the Tree-RAG framework (located in the fig
 ### Instruction for RAG
 ![PDF3_PNG1](figures/PDF3_PNG1.png)
 
+
+
+## Citation
+If you find this code useful for your research, please cite our paper:
+```
+@article{jiao2026prunerag,
+  title={PruneRAG: Confidence-Guided Query Decomposition Trees for Efficient Retrieval-Augmented Generation},
+  author={Shuguang Jiao, Xinyu Xiao, Yunfan Wei, Shuhan Qi, Chengkai Huang, Quan Z. Michael Sheng and Lina Yao},
+  conference={The Web Conference 2026 (WWW)},
+  year={2026}
+}
+```
 ## License
 
 
