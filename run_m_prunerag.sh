@@ -8,13 +8,14 @@ CONFIG_PATH="./config/dataset_paths.json"
 
 RETRIEVER_NAME="bge"
 TOPK=5
-
+TOP_P1=0
+TOP_P2=2
 
 MODEL_PATH="./models/llama-3.1-8b-instruct"
 ##############################-----hotpotqa-----######################################
 DATASET_NAME="hotpotqa"
 
-python -m PruneRAG_pipelines.tree_pipeline \
+python -m M-PruneRAG_pipelines.tree_pipeline_auto \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -22,6 +23,8 @@ python -m PruneRAG_pipelines.tree_pipeline \
     --dataset_name $DATASET_NAME \
     --split "test" \
     --topk $TOPK \
+    --top_p1 $TOP_P1 \
+    --top_p2 $TOP_P2 \
     --max_depth 3 \
     --all_decom_depth 0 \
     --threshold 0.95 \
@@ -31,7 +34,7 @@ python -m PruneRAG_pipelines.tree_pipeline \
 ##############################-----musique-----######################################
 DATASET_NAME="musique"
 
-python -m PruneRAG_pipelines.tree_pipeline \
+python -m M-PruneRAG_pipelines.tree_pipeline_auto \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -39,6 +42,8 @@ python -m PruneRAG_pipelines.tree_pipeline \
     --dataset_name $DATASET_NAME \
     --split "test" \
     --topk $TOPK \
+    --top_p1 $TOP_P1 \
+    --top_p2 $TOP_P2 \
     --max_depth 3 \
     --all_decom_depth 0 \
     --threshold 0.95 \
@@ -50,7 +55,7 @@ python -m PruneRAG_pipelines.tree_pipeline \
 ##############################-----2wiki-----######################################
 DATASET_NAME="2wiki"
 
-python -m PruneRAG_pipelines.tree_pipeline \
+python -m M-PruneRAG_pipelines.tree_pipeline_auto \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -58,6 +63,8 @@ python -m PruneRAG_pipelines.tree_pipeline \
     --dataset_name $DATASET_NAME \
     --split "test" \
     --topk $TOPK \
+    --top_p1 $TOP_P1 \
+    --top_p2 $TOP_P2 \
     --max_depth 3 \
     --all_decom_depth 0 \
     --threshold 0.95 \
@@ -67,7 +74,7 @@ python -m PruneRAG_pipelines.tree_pipeline \
 ##############################-----bamboogle-----######################################
 DATASET_NAME="bamboogle"
 
-python -m PruneRAG_pipelines.tree_pipeline \
+python -m M-PruneRAG_pipelines.tree_pipeline_auto \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -75,6 +82,8 @@ python -m PruneRAG_pipelines.tree_pipeline \
     --dataset_name $DATASET_NAME \
     --split "test" \
     --topk $TOPK \
+    --top_p1 $TOP_P1 \
+    --top_p2 $TOP_P2 \
     --max_depth 3 \
     --all_decom_depth 0 \
     --threshold 0.95 \
@@ -84,7 +93,7 @@ python -m PruneRAG_pipelines.tree_pipeline \
 ################################-----gpqa-----######################################
 DATASET_NAME="gpqa"
 
-python -m PruneRAG_pipelines.tree_pipeline \
+python -m M-PruneRAG_pipelines.tree_pipeline_auto \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -92,6 +101,8 @@ python -m PruneRAG_pipelines.tree_pipeline \
     --dataset_name $DATASET_NAME \
     --split "test" \
     --topk $TOPK \
+    --top_p1 $TOP_P1 \
+    --top_p2 $TOP_P2 \
     --max_depth 3 \
     --all_decom_depth 0 \
     --threshold 0.95 \
@@ -107,7 +118,7 @@ MODEL_PATH="/workspace/Search-R1/models/qwen3-8b"
 ##############################-----hotpotqa-----######################################
 DATASET_NAME="hotpotqa"
 
-python -m PruneRAG_pipelines.tree_pipeline \
+python -m M-PruneRAG_pipelines.tree_pipeline_auto \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -115,16 +126,19 @@ python -m PruneRAG_pipelines.tree_pipeline \
     --dataset_name $DATASET_NAME \
     --split "test" \
     --topk $TOPK \
+    --top_p1 $TOP_P1 \
+    --top_p2 $TOP_P2 \
     --max_depth 3 \
     --all_decom_depth 0 \
     --threshold 0.95 \
     --output_dir "./outputs" \
     --log_dir "./logs"
 
+
 ##############################-----musique-----######################################
 DATASET_NAME="musique"
 
-python -m PruneRAG_pipelines.tree_pipeline \
+python -m M-PruneRAG_pipelines.tree_pipeline_auto \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -132,6 +146,8 @@ python -m PruneRAG_pipelines.tree_pipeline \
     --dataset_name $DATASET_NAME \
     --split "test" \
     --topk $TOPK \
+    --top_p1 $TOP_P1 \
+    --top_p2 $TOP_P2 \
     --max_depth 3 \
     --all_decom_depth 0 \
     --threshold 0.95 \
@@ -141,7 +157,7 @@ python -m PruneRAG_pipelines.tree_pipeline \
 ##############################-----bamboogle-----######################################
 DATASET_NAME="bamboogle"
 
-python -m PruneRAG_pipelines.tree_pipeline \
+python -m M-PruneRAG_pipelines.tree_pipeline_auto \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -149,6 +165,8 @@ python -m PruneRAG_pipelines.tree_pipeline \
     --dataset_name $DATASET_NAME \
     --split "test" \
     --topk $TOPK \
+    --top_p1 $TOP_P1 \
+    --top_p2 $TOP_P2 \
     --max_depth 3 \
     --all_decom_depth 0 \
     --threshold 0.95 \
@@ -159,7 +177,7 @@ python -m PruneRAG_pipelines.tree_pipeline \
 ##############################-----2wiki-----######################################
 DATASET_NAME="2wiki"
 
-python -m PruneRAG_pipelines.tree_pipeline \
+python -m M-PruneRAG_pipelines.tree_pipeline_auto \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -167,6 +185,8 @@ python -m PruneRAG_pipelines.tree_pipeline \
     --dataset_name $DATASET_NAME \
     --split "test" \
     --topk $TOPK \
+    --top_p1 $TOP_P1 \
+    --top_p2 $TOP_P2 \
     --max_depth 3 \
     --all_decom_depth 0 \
     --threshold 0.95 \
@@ -185,7 +205,7 @@ MODEL_PATH="/workspace/Search-R1/models/qwen3-32b-awq"
 ##############################-----hotpotqa-----######################################
 DATASET_NAME="hotpotqa"
 
-python -m PruneRAG_pipelines.tree_pipeline \
+python -m M-PruneRAG_pipelines.tree_pipeline_auto \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -193,6 +213,8 @@ python -m PruneRAG_pipelines.tree_pipeline \
     --dataset_name $DATASET_NAME \
     --split "test" \
     --topk $TOPK \
+    --top_p1 $TOP_P1 \
+    --top_p2 $TOP_P2 \
     --max_depth 3 \
     --all_decom_depth 0 \
     --threshold 0.95 \
@@ -202,7 +224,7 @@ python -m PruneRAG_pipelines.tree_pipeline \
 ##############################-----musique-----######################################
 DATASET_NAME="musique"
 
-python -m PruneRAG_pipelines.tree_pipeline \
+python -m M-PruneRAG_pipelines.tree_pipeline_auto \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -210,16 +232,19 @@ python -m PruneRAG_pipelines.tree_pipeline \
     --dataset_name $DATASET_NAME \
     --split "test" \
     --topk $TOPK \
+    --top_p1 $TOP_P1 \
+    --top_p2 $TOP_P2 \
     --max_depth 3 \
     --all_decom_depth 0 \
     --threshold 0.95 \
     --output_dir "./outputs" \
     --log_dir "./logs"
 
+
 ##############################-----bamboogle-----######################################
 DATASET_NAME="bamboogle"
 
-python -m PruneRAG_pipelines.tree_pipeline \
+python -m M-PruneRAG_pipelines.tree_pipeline_auto \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -227,6 +252,8 @@ python -m PruneRAG_pipelines.tree_pipeline \
     --dataset_name $DATASET_NAME \
     --split "test" \
     --topk $TOPK \
+    --top_p1 $TOP_P1 \
+    --top_p2 $TOP_P2 \
     --max_depth 3 \
     --all_decom_depth 0 \
     --threshold 0.95 \
@@ -237,7 +264,7 @@ python -m PruneRAG_pipelines.tree_pipeline \
 ##############################-----2wiki-----######################################
 DATASET_NAME="2wiki"
 
-python -m PruneRAG_pipelines.tree_pipeline \
+python -m M-PruneRAG_piplines.tree_pipeline \
     --model_path $MODEL_PATH \
     --retriever_name $RETRIEVER_NAME \
     --retrieval_url "http://localhost:8000" \
@@ -245,12 +272,13 @@ python -m PruneRAG_pipelines.tree_pipeline \
     --dataset_name $DATASET_NAME \
     --split "test" \
     --topk $TOPK \
+    --top_p1 $TOP_P1 \
+    --top_p2 $TOP_P2 \
     --max_depth 3 \
     --all_decom_depth 0 \
     --threshold 0.95 \
     --output_dir "./outputs" \
     --log_dir "./logs"
-
 
 
 
