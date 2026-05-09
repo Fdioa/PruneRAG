@@ -56,6 +56,33 @@ def get_singleqa_search_o1_instruction(MAX_SEARCH_LIMIT):
         "- When done searching, continue your reasoning.\n\n"
     )
 
+# def get_multiqa_search_o1_instruction(MAX_SEARCH_LIMIT):
+#     return (
+#         "You are a reasoning assistant with the ability to perform web searches to help "
+#         "you answer the user's question accurately. You have special tools:\n\n"
+#         "- To perform a search: write <|begin_search_query|> your query here <|end_search_query|>.\n"
+#         "Then, the system will search and analyze relevant web pages, then provide you with helpful information in the format <|begin_search_result|> ...search results... <|end_search_result|>.\n\n"
+#         f"You can repeat the search process multiple times if necessary. The maximum number of search attempts is limited to {MAX_SEARCH_LIMIT}.\n\n"
+#         "Once you have all the information you need, continue your reasoning.\n\n"
+#         "Example:\n"
+#         "Question: \"Alice David is the voice of Lara Croft in a video game developed by which company?\"\n"
+#         "Assistant thinking steps:\n"
+#         "- I need to find out who voices Lara Croft in the video game.\n"
+#         "- Then, I need to determine which company developed that video game.\n\n"
+#         "Assistant:\n"
+#         "<|begin_search_query|>Alice David Lara Croft voice<|end_search_query|>\n\n"
+#         "(System returns processed information from relevant web pages)\n\n"
+#         "Assistant thinks: The search results indicate that Alice David is the voice of Lara Croft in a specific video game. Now, I need to find out which company developed that game.\n\n"
+#         "Assistant:\n"
+#         "<|begin_search_query|>video game developed by Alice David Lara Croft<|end_search_query|>\n\n"
+#         "(System returns processed information from relevant web pages)\n\n"
+#         "Assistant continues reasoning with the new information...\n\n"
+#         "Remember:\n"
+#         "- Use <|begin_search_query|> to request a web search and end with <|end_search_query|>.\n"
+#         "- When done searching, continue your reasoning.\n"
+#     )
+
+
 def get_multiqa_search_o1_instruction(MAX_SEARCH_LIMIT):
     return (
         "You are a reasoning assistant with the ability to perform web searches to help "
@@ -63,23 +90,24 @@ def get_multiqa_search_o1_instruction(MAX_SEARCH_LIMIT):
         "- To perform a search: write <|begin_search_query|> your query here <|end_search_query|>.\n"
         "Then, the system will search and analyze relevant web pages, then provide you with helpful information in the format <|begin_search_result|> ...search results... <|end_search_result|>.\n\n"
         f"You can repeat the search process multiple times if necessary. The maximum number of search attempts is limited to {MAX_SEARCH_LIMIT}.\n\n"
-        "Once you have all the information you need, continue your reasoning.\n\n"
+        "IMPORTANT: Before EACH search, you MUST explicitly reason about what specifically you need to find and why. Wrap this reasoning in <reason>...</reason> tags.\n\n"
         "Example:\n"
         "Question: \"Alice David is the voice of Lara Croft in a video game developed by which company?\"\n"
-        "Assistant thinking steps:\n"
-        "- I need to find out who voices Lara Croft in the video game.\n"
-        "- Then, I need to determine which company developed that video game.\n\n"
         "Assistant:\n"
-        "<|begin_search_query|>Alice David Lara Croft voice<|end_search_query|>\n\n"
-        "(System returns processed information from relevant web pages)\n\n"
-        "Assistant thinks: The search results indicate that Alice David is the voice of Lara Croft in a specific video game. Now, I need to find out which company developed that game.\n\n"
+        "<reason>\n"
+        "I need to break this down. First, I have to identify the specific video game where Alice David voiced Lara Croft. Once I have the game title, I will search for its developer.\n"
+        "</reason>\n"
+        "<|begin_search_query|>Alice David Lara Croft voice video game<|end_search_query|>\n\n"
+        "(System returns: Alice David voiced Lara Croft in the French version of 'Tomb Raider' (2013).)\n\n"
         "Assistant:\n"
-        "<|begin_search_query|>video game developed by Alice David Lara Croft<|end_search_query|>\n\n"
-        "(System returns processed information from relevant web pages)\n\n"
-        "Assistant continues reasoning with the new information...\n\n"
+        "<reason>\n"
+        "The search results confirm she voiced Lara Croft in 'Tomb Raider' (2013). Now I need to find the developer of this specific game.\n"
+        "</reason>\n"
+        "<|begin_search_query|>Tomb Raider 2013 developer<|end_search_query|>\n"
+        "Assistant continues reasoning...\n"
         "Remember:\n"
-        "- Use <|begin_search_query|> to request a web search and end with <|end_search_query|>.\n"
-        "- When done searching, continue your reasoning.\n\n"
+        "- ALWAYS output <reason>...</reason> before using <|begin_search_query|>.\n"
+        "- When you have sufficient information, provide the final answer.\n\n>"
     )
 
 def get_task_instruction_openqa(question, model_name=None):
@@ -139,8 +167,63 @@ def get_native_instruction(multi_choice=False):
                 IMPORTANT: You should provide your final answer in the format \\boxed{{YOUR_ANSWER}}.
                 For example, Question: What is the capital of France? Answer: \\boxed{{Paris}}.
                 Question: {question}
-                Answer:'''
+                Answer:
+            '''
         )
+    return user_prompt
+
+def get_native_instruction_fever():
+    user_prompt = (
+            '''
+                You are performing a fact verification task following the FEVER protocol. 
+                The goal is to decide whether the claim in the question is:
+                - "SUPPORTS": The evidence clearly supports the claim.
+                - "REFUTES": The evidence contradicts the claim.
+                - "NOT ENOUGH INFO": The evidence is insufficient or conflicting.
+
+                Use only the information provided in the context. 
+                Do NOT generate explanations or sentences.
+
+                Your final answer must be formatted as:
+                \\boxed{{SUPPORTS}} or \\boxed{{REFUTES}} or \\boxed{{NOT ENOUGH INFO}}
+
+                Claim:
+                {question}
+
+                Verdict:
+
+            '''
+        )
+    
+    return user_prompt
+
+
+def get_rag_instruction_fever():
+    user_prompt = (
+            '''
+                You are performing a fact verification task following the FEVER protocol. 
+                The goal is to decide whether the claim in the question is:
+                - "SUPPORTS": The evidence clearly supports the claim.
+                - "REFUTES": The evidence contradicts the claim.
+                - "NOT ENOUGH INFO": The evidence is insufficient or conflicting.
+
+                You can use the following documents to help you answer the question.
+                Documents: {context}
+
+                Use only the information provided in the documents. 
+                Do NOT generate explanations or sentences.
+
+                Your final answer must be formatted as:
+                \\boxed{{SUPPORTS}} or \\boxed{{REFUTES}} or \\boxed{{NOT ENOUGH INFO}}
+
+                Claim:
+                {question}
+
+                Verdict:
+
+            '''
+        )
+    
     return user_prompt
 
 def get_rag_instruction(multi_choice=False):
@@ -174,10 +257,72 @@ def get_rag_instruction(multi_choice=False):
 
 def get_react_examples():
     user_prompt = (
-        "Question: Were Pavel Urysohn and Leonid Levin known for the same type of work?\nThought 1: I need to search Pavel Urysohn and Leonid Levin, find their types of work, then find if they are the same.\nAction 1: Search[Pavel Urysohn]\nObservation 1: Pavel Samuilovich Urysohn (February 3, 1898 \u00e2\u0080\u0093 August 17, 1924) was a Soviet mathematician who is best known for his contributions in dimension theory.\nThought 2: Pavel Urysohn is a mathematician. I need to search Leonid Levin next and find its type of work.\nAction 2: Search[Leonid Levin]\nObservation 2: Leonid Anatolievich Levin is a Soviet-American mathematician and computer scientist. \nThought 3: Leonid Levin is a mathematician and computer scientist. So Pavel Urysohn and Leonid Levin have the same type of work. \nAction 3: Finish[yes]\n"
+        "Question: Were Pavel Urysohn and Leonid Levin known for the same type of work?\nThought 1: I need to search Pavel Urysohn and Leonid Levin, find their types of work, then find if they are the same.\nAction 1: Search[Pavel Urysohn]\nObservation 1: Pavel Samuilovich Urysohn (February 3, 1898 \u00e2\u0080\u0093 August 17, 1924) was a Soviet mathematician who is best known for his contributions in dimension theory.\nThought 2: Pavel Urysohn is a mathematician. I need to search Leonid Levin next and find its type of work.\nAction 2: Search[Leonid Levin]\nObservation 2: Leonid Anatolievich Levin is a Soviet-American mathematician and computer scientist. \nThought 3: Leonid Levin is a mathematician and computer scientist. So Pavel Urysohn and Leonid Levin have the same type of work. \nAction 3: Finish[yes]\n\n"
     )
     return user_prompt
 
+
+
+def get_subqueries_qwen3_8b_confidence():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, provide a confidence score between 0.0 and 1.0  which measures how confident you are in your answer. Use the following format to respond:
+```json
+{{"type": "answer", "answer": "Write your answer here", "confidence": "Write your confidence score here" }}
+```
+2. **Decomposition**
+If the Query cannot be directly answered,please split the query into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
+```
+3. **Entity Extraction**
+If the query contains only one entity information that needs to be clarified, extract the entity and express it as two entities from different perspectives, respond as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "..."}}
+```
+### Rules:
+Ignore information not relevant to the query in the Query_context.
+Only use "answer" when you are **100% sure** the answer is directly supported by the context.
+Confidence must be a single numeric value between 0.0 and 1.0 (inclusive). No text, no symbols, no explanation.
+Ensure subquery1, subquery2, entity1, entity2, and answer in json format are all string values.
+The output must be a single JSON object inside a markdown code block.
+Please think carefully before making your choice.
+### Examples:
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844-1846) was an American literary periodical published in Philadelphia in the 19th century.
+Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844", "confidence": "1.0"}}
+```
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?"}}
+```
+**Example 3 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker"}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+        '''
+    )
+    return user_prompt
 
 def get_subqueries_qwen3_8b():
     user_prompt = (
@@ -237,6 +382,146 @@ Query: {query}
 Output:
         '''
     )
+    return user_prompt
+
+def get_subqueries_qwen3_8b_auto():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "...", "relevant_score":{{"Doc_1":..,..."Doc_n":..}}}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered,please split the query into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "relevant_score":{{"Doc_1":..,..."Doc_n":..}}}}
+```
+3. **Entity Extraction**
+If the query contains only one entity information that needs to be clarified, extract the entity and express it as two entities from different perspectives, respond as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "...", "relevant_score":{{"Doc_1":..,..."Doc_n":..}}}}
+```
+### Rules:
+Ignore information not relevant to the query in the Query_context.
+Only use "answer" when you are **100% sure** the answer is directly supported by the context.
+Ensure subquery1, subquery2, entity1, entity2, and answer in json format are all string values.
+The output must be a single JSON object inside a markdown code block.
+Please think carefully before making your choice.
+### Examples:
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844-1846) was an American literary periodical published in Philadelphia in the 19th century.
+Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844", "relevant_score":{{"Doc_1":0.8}}}}
+```
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?", "relevant_score":{{"Doc_1":0.9}}}}
+```
+**Example 3 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker", "relevant_score":{{"Doc_1":..,..."Doc_n":..}}}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+        '''
+    )
+    return user_prompt
+
+
+
+def get_subqueries_qwen3_8b_auto_wo_ans():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+
+```
+### Rules:
+
+for action types:
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+    Use relevant_score that between 0 and 1 to indicate whether the context can help solving the query.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+### Available Action Types:
+1. **Decomposition**
+If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "doc_score":[...]}}
+```
+2. **Entity Extraction**
+If the Query lacks sufficient context to be answered or decomposed, but contains key identifiable entities, extract them as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "...", "doc_score":[...]}}
+
+
+
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+
+''')
+
+    return user_prompt
+
+
+def get_subqueries_qwen3_8b_auto_wo_ent():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+
+```
+### Rules:
+
+for action types:
+    Only use "answer" when you are 100% sure the answer is directly supported by the context.
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+    Use relevant_score that between 0 and 1 to indicate whether the context can help solving the query.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "...", "relevant_score":"doc_score":[...]}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "relevant_score":"doc_score":[...]}}
+```
+
+
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+
+''')
+
     return user_prompt
 
 def get_subqueries_qwen3_8b_wo_ans():
@@ -353,6 +638,35 @@ For example, Question: What is the capital of France? Answer: \\boxed{{Paris}}.
 ### Answer: 
 '''
         )
+    
+    return user_prompt
+    
+    
+def get_final_answer_qwen3_8b_fever():
+    user_prompt = (
+            '''
+### Inference Tree:
+{context}
+
+You are performing a fact verification task following the FEVER protocol. 
+The goal is to decide whether the claim in the question is:
+- "SUPPORTS": The evidence clearly supports the claim.
+- "REFUTES": The evidence contradicts the claim.
+- "NOT ENOUGH INFO": The evidence is insufficient or conflicting.
+
+Use only the information provided in the Inference Tree. 
+Do NOT generate explanations or sentences.
+
+Your final answer must be formatted as:
+\\boxed{{SUPPORTS}} or \\boxed{{REFUTES}} or \\boxed{{NOT ENOUGH INFO}}
+
+### Claim:
+{question}
+
+### Verdict:
+
+'''
+        )
 
     return user_prompt
 
@@ -375,28 +689,72 @@ For example, Question: What is the capital of France?\n(A) Paris \n(B) London \n
         )
 
     return user_prompt
+# def get_subqueries_llama3_8b_first():
+#     user_prompt = (
+#         '''
+# You are given a query along with its parent question and optional context. Your task is to decompose the query into two logically related sub-queries.
 
+# If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+# ```json
+# {{"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
+# ```
+# ### Rules:
+# Ignore information not relevant to the query in the Query_context.
+# Ensure subquery1, subquery2 are all string values.
+# The output must be a single JSON object inside a markdown code block.
+# Do not provide any explanation or commentary outside the JSON.
+
+# ### Example:
+# Query_context: ...
+# Query: ...
+# Output:
+# ```json
+# {{"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
+# ```
+
+# ### Your Task:
+# Query_context: {context}
+# Query: {query}
+# Output:
+# '''
+#     )
+
+#     return user_prompt
 def get_subqueries_llama3_8b_first():
+
     user_prompt = (
         '''
-You are given a query along with its parent question and optional context. Your task is to decompose the query into two logically related sub-queries.
+You are given a query along with its parent question and optional context. Your task is to decompose the query into two logically related sub-queries and judge whether the contexts can help you solve the query using a relevant_score.
+
+```
+### Rules:
+
+for relevant_score:
+1. Only consider information relevant to the query in the Query_context.
+2. **If a context provides direct or indirect evidence to answer the query, assign a higher relevant_score.**
+3. The output must be a single json object containing float values.
+4. The relevant_score should be a float value between 0 and 1, where 0 means completely irrelevant and 1 means highly relevant.
+5. Use Doc_i to represent the i-th context,which means the output json's key should be{{"Doc_i": ..}} for the i-th context but not other specific format.
+6. **The number of keys in the output json must be equal to the number of contexts provided.for example, if there are 5 contexts given, the output json must contain 5 key-value pairs.**
+
+for decomposition:
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2 are all string values.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+
 
 If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
 ```json
-{{"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
-```
-### Rules:
-Ignore information not relevant to the query in the Query_context.
-Ensure subquery1, subquery2 are all string values.
-The output must be a single JSON object inside a markdown code block.
-Do not provide any explanation or commentary outside the JSON.
+{{"relevant_score": {{"Doc_1": .., "Doc_2": ..,..."Doc_n":..}},"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
 
 ### Example:
 Query_context: ...
 Query: ...
 Output:
 ```json
-{{"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
+{{"relevant_score": {{"Doc_1": .., "Doc_2": ..,..."Doc_n":..}}, "type": "decomposition", "subquery1": "...", "subquery2": "..."}}
 ```
 
 ### Your Task:
@@ -445,6 +803,35 @@ def get_final_answer_llama3_8b(multi_choice=False):
 
     return user_prompt
 
+
+def get_final_answer_llama3_8b_fever():
+    user_prompt = (
+            '''
+### Inference Tree:
+{context}
+
+You are performing a fact verification task following the FEVER protocol. 
+The goal is to decide whether the claim in the question is:
+- "SUPPORTS": The evidence clearly supports the claim.
+- "REFUTES": The evidence contradicts the claim.
+- "NOT ENOUGH INFO": The evidence is insufficient or conflicting.
+
+Use only the information provided in the Inference Tree. 
+Do NOT generate explanations or sentences.
+
+Your final answer must be formatted as:
+\\boxed{{SUPPORTS}} or \\boxed{{REFUTES}} or \\boxed{{NOT ENOUGH INFO}}
+
+### Claim:
+{question}
+
+### Verdict:
+
+'''
+        )
+
+    return user_prompt
+
 def get_final_answer_llama3_8b_multi_choice():
     user_prompt = (
             '''
@@ -465,6 +852,67 @@ For example, Question: What is the capital of France?\n(A) Paris \n(B) London \n
 
     return user_prompt
 
+def get_subqueries_llama3_8b_confidence():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, provide a confidence score between 0.0 and 1.0  which measures how confident you are in your answer. Use the following format to respond:
+```json
+{{"type": "answer", "answer": "Write your answer here", "confidence": "Write your confidence score here" }}
+```
+2. **Decomposition**
+If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
+```
+3. **Entity Extraction**
+If the Query lacks sufficient context to be answered or decomposed, but contains key identifiable entities, extract them as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "..."}}
+```
+### Rules:
+Only use "answer" when you are 100% sure the answer is directly supported by the context.
+Confidence must be a single numeric value between 0.0 and 1.0 (inclusive). No text, no symbols, no explanation.
+Ignore information not relevant to the query in the Query_context.
+Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+The output must be a single JSON object inside a markdown code block.
+Do not provide any explanation or commentary outside the JSON.
+### Examples:
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844", "confidence": "1.0"}}
+```
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?"}}
+```
+**Example 3 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker"}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+
+''')
+
+    return user_prompt
 def get_subqueries_llama3_8b():
     user_prompt = (
 '''
@@ -516,6 +964,190 @@ Output:
 ``` json 
 {{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker"}}
 ```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+
+''')
+
+    return user_prompt
+
+def get_subqueries_llama3_8b_auto():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+
+```
+### Rules:
+
+for action types:
+    Only use "answer" when you are 100% sure the answer is directly supported by the context.
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+    Use relevant_score that between 0 and 1 to indicate whether the context can help solving the query.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "...", "relevant_score":{{"Doc_1":..,..."Doc_n":..}}}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "relevant_score":{{"Doc_1":..,..."Doc_n":..}}}}
+```
+3. **Entity Extraction**
+If the Query lacks sufficient context to be answered or decomposed, but contains key identifiable entities, extract them as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "...", "relevant_score":{{"Doc_1":..,..."Doc_n":..}}}}
+
+
+
+### Examples:
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century. Doc 2:...,..., Doc n:...
+Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844", "relevant_score":{{"Doc_1":1.0,"Doc_2":0.2,...,"Doc_n":..}}\n}}
+```
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.Doc 2:...,..., Doc n:...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?", "relevant_score":{{"Doc_1":0.9,"Doc_2":0.2,...,"Doc_n":..}}\n}}
+```
+**Example 3 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker", "relevant_score":{{"Doc_1":..,"Doc_2":..,...,"Doc_n":..}}\n}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+
+''')
+
+    return user_prompt
+
+
+def get_subqueries_llama3_8b_auto_wo_ans():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+
+```
+### Rules:
+
+for action types:
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+    Use relevant_score that between 0 and 1 to indicate whether the context can help solving the query.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+### Available Action Types:
+1. **Decomposition**
+If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "doc_score":[...]}}
+```
+2. **Entity Extraction**
+If the Query lacks sufficient context to be answered or decomposed, but contains key identifiable entities, extract them as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "...", "doc_score":[...]}}
+
+
+
+### Examples:
+**Example 1 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.Doc 2:...,..., Doc n:...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?", "doc_score":[0.9,0.2,...,..]\n}}
+```
+**Example 2 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker", "doc_score":[...]}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+
+''')
+
+    return user_prompt
+
+
+def get_subqueries_llama3_8b_auto_wo_ent():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+
+```
+### Rules:
+
+for action types:
+    Only use "answer" when you are 100% sure the answer is directly supported by the context.
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+    Use relevant_score that between 0 and 1 to indicate whether the context can help solving the query.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "...", "doc_score":[...]}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "doc_score":[...]}}
+
+
+
+
+### Examples:
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century. Doc 2:...,..., Doc n:...
+Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844", "doc_score":[1.0,0.2]\n}}
+```
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.Doc 2:...,..., Doc n:...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?", "doc_score":[0.9,0.2]\n}}
+```
+
 ### Your Task:
 Query_context: {context}
 Parent_query of the Query: {parent_query}
@@ -835,4 +1467,854 @@ Answer:
 Oprah Winfrey narrated a documentary about the athelete Emmanuel Ofosu Yeboah, who rode 400 miles across his country to bring attention to the plight of the disabled in the country. So the answer is: Emmanuel Ofosu Yeboah.
 #
 ''')
+    return user_prompt
+
+
+def get_memory_context_prompt():
+
+    #bool list
+#     user_prompt = (
+# '''
+# Given a query and contexts, you should judge whether the contexts can help you solve the query.
+# The final output should be a list of boolean values, where each value corresponds to whether the respective context can help answer the query,for example,if 3 contexts are given, response as:
+# ``` context
+# [bool, bool, bool]
+# ```
+# ### Rules:
+# 1.Only consider information relevant to the query in the Query_context.
+# 2. If a context provides direct or indirect evidence to answer the query, mark it as True.
+# 3. **The length of the output list must be equal to the number of contexts provided.**for example, if there are 5 contexts given, the output list must contain 5 boolean values.**
+# 4. The output must be a single list of boolean values.
+# 5. Do not provide any explanation or commentary outside the list.
+
+
+# ## Examples:
+# **Example:**
+# Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+# Query: When was the Arthur's Magazine started?
+# Output: 
+# ``` context
+# [True]
+# ```
+
+
+# ## Your Task:
+# Query_context: {context}
+# Query: {query}
+# Output:
+
+# ''')
+
+    #json
+#     user_prompt = (
+# '''
+# Given a query and contexts, you should judge whether the contexts can help you solve the query.
+# The final output should be a json, where each value corresponds to whether the respective context can help answer the query,for example,if 3 contexts are given, response as:
+# ``` json
+# {{"Doc1": bool, "Doc2": bool, "Doc3": bool}}
+# ```
+# ### Rules:
+# 1.Only consider information relevant to the query in the Query_context.
+# 2. If a context provides direct or indirect evidence to answer the query, mark it as True.
+# 3. **The number of keys in the output json must be equal to the number of contexts provided.**for example, if there are 5 contexts given, the output json must contain 5 key-value pairs.**
+# 4. The output must be a single json object containing boolean values.
+# 5. Do not provide any explanation or commentary outside the list.
+
+
+# ## Examples:
+# **Example:**
+# Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+# Query: When was the Arthur's Magazine started?
+# Output: 
+# ``` json
+# {{"Doc1": True}}
+# ```
+
+
+# ## Your Task:
+# Query_context: {context}
+# Query: {query}
+# Output:
+
+# ''')
+
+    #relevant_score
+    user_prompt = (
+'''
+Given a query and the retrieved contexts, you should judge whether the contexts can help you solve the query using a relevant_score.
+
+### Rules:
+1. Only consider information relevant to the query in the Query_context.
+2. **If a context provides direct or indirect evidence to answer the query, assign a higher relevant_score.**
+3. The number of keys in the output json must be equal to the number of contexts provided.for example, if there are 5 contexts given, the output json must contain 5 key-value pairs.**
+4. The output must be a single json object containing float values.
+5. The relevant_score should be a float value between 0 and 1, where 0 means completely irrelevant and 1 means highly relevant.
+6. Use Doc_i to represent the i-th context,which means the output json's key should be{{"Doc_i": relevant_score}} for the i-th context but not other specific format.
+7. Do not provide any explanation or commentary or content outside the json.
+8. The output json must be enclosed within a markdown code block.
+
+
+The final output should be a json, where each value corresponds to whether the respective context can help answer the query,for example,if 3 contexts are given, response as:
+``` json
+{{"Doc_1": 0.9, "Doc_2": 0.3, "Doc_3": 0.7}}
+```
+
+## Examples:
+**Example:**
+Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"Doc_1": 0.9}}
+```
+
+
+## Your Task:
+Query_context: {context}
+Query: {query}
+Output:
+
+''')
+#    user_prompt = (
+# '''
+# Given a query and contexts, you should judge whether the contexts can help you solve the query using a relevant_score.
+# The final output should be a json, where each value corresponds to whether the respective context can help answer the query,for example,if 3 contexts are given, response as:
+# ``` json
+# {{"Doc1": relevant_score, "Doc2": relevant_score, "Doc3": relevant_score}}
+# ```
+# ### Rules:
+# 1. Only consider information relevant to the query in the Query_context.
+# 2. If a context provides direct or indirect evidence to answer the query, assign a higher relevant_score.
+# 3. **The number of keys in the output json must be equal to the number of contexts provided.**for example, if there are 5 contexts given, the output json must contain 5 key-value pairs.**
+# 4. The output must be a single json object containing float values.
+# 5. The relevant_score should be a float value between 0 and 1, where 0 means completely irrelevant and 1 means highly relevant.
+# 6. Do not provide any explanation or commentary outside the json.
+
+
+# ## Examples:
+# **Example:**
+# Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+# Query: When was the Arthur's Magazine started?
+# Output: 
+# ``` json
+# {{"Doc1": 0.9}}
+# ```
+
+
+# ## Your Task:
+# Query_context: {context}
+# Query: {query}
+# Output:
+
+# ''')
+    return user_prompt
+
+# 2. If a context provides direct evidence to answer the query, mark it as True.
+# # 3. If a context provides indirect evidence that can help deduce the answer, mark it as True.
+# 4. If a context is unrelated or does not contribute to answering the query, mark it as False.
+# # 5. The output must be a markdown code block containing a single list of boolean values.
+# # 6. Do not provide any explanation or commentary outside the list.
+# # 7.
+
+
+def get_subqueries_llama3_8b_auto_hotpotQA():
+#     user_prompt = (
+# '''
+# You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+# ### Available Action Types:
+# 1. **Direct Answer**  
+# If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+# ```json
+# {{"type": "answer", "answer": "..."}}
+# ```
+# 2. **Decomposition**
+# If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+# ```json
+# {{"type": "decomposition", "subquery1": "...", "subquery2": "..."}}
+# ```
+# 3. **Entity Extraction**
+# If the Query lacks sufficient context to be answered or decomposed, but contains key identifiable entities, extract them as:
+# ```json
+# {{"type": "entity", "entity1": "...", "entity2": "..."}}
+# ```
+# ### Rules:
+# Only use "answer" when you are 100% sure the answer is directly supported by the context.
+# Ignore information not relevant to the query in the Query_context.
+# Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+# The output must be a single JSON object inside a markdown code block.
+# Do not provide any explanation or commentary outside the JSON.
+# ### Examples:
+# **Example 1 (Direct Answer):**
+# Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+# Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+# Query: When was the Arthur's Magazine started?
+# Output: 
+# ``` json
+# {{"type": "answer", "answer": "1844"}}
+# ```
+# **Example 2 (Decomposition):**
+# Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.
+# Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+# Query: What is the birhday of the director of A Flame In My Heart?
+# Output: 
+# ``` json
+# {{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?"}}
+# ```
+# **Example 3 (Entity Extraction):**
+# Query_context: ...
+# Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+# Query: Who is the director of Butcher, Baker, Nightmare Maker?
+# Output: 
+# ``` json 
+# {{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker"}}
+# ```
+# ### Your Task:
+# Query_context: {context}
+# Parent_query of the Query: {parent_query}
+# Query: {query}
+# Output:
+
+# ''')
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "...", "doc_score":[...]}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "doc_score":[...]}}
+```
+3. **Entity Extraction**
+If the Query lacks sufficient context to be answered or decomposed, but contains key identifiable entities, extract them as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "...", "doc_score":[...]}}
+```
+
+### Rules:
+for doc_score:
+    Assign relevance scores to each document to indicate how useful they are for solving the query.
+    The score reflects the document's potential relevance to the query. Higher scores indicate documents that contain relevant information.
+    The score is a float number between 0 and 1.
+    The number of the doc_score list should be the same as the number of the documents in the Query_context.
+for action type:
+    Only use "answer" when you are 100% sure the answer is directly supported by the context.
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+
+### Examples:
+
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844", "doc_score":[1.0]}}
+```
+
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner....,Doc 2:...,Doc 3:...,Doc 4:...,Doc 5:...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?", "doc_score":[1.0,0.9,0.8,0.7,0.6]}}
+```
+
+**Example 3 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker", "doc_score":[...]}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+
+''')
+
+
+    return user_prompt
+
+
+# def get_subqueries_llama3_8b_auto_2wiki():
+#     user_prompt = (
+# '''
+# You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+# ### Available Action Types:
+# 1. **Direct Answer**  
+# If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+# ```json
+# {{"type": "answer", "answer": "...", "doc_score":[...]}}
+# ```
+# 2. **Decomposition**
+# If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+# ```json
+# {{"type": "decomposition", "subquery1": "...", "subquery2": "...", "doc_score":[...]}}
+# ```
+# 3. **Entity Extraction**
+# If the Query lacks sufficient context to be answered or decomposed, but contains key identifiable entities, extract them as:
+# ```json
+# {{"type": "entity", "entity1": "...", "entity2": "...", "doc_score":[...]}}
+# ```
+
+# ### Rules:
+# for doc_score:
+#     Assign relevance scores to each document to indicate how useful they are for solving the query.
+#     The score reflects the document's potential relevance to the query. Higher scores indicate documents that contain relevant information.
+
+# for action type:
+#     Only use "answer" when you are 100% sure the answer is directly supported by the context.
+#     Ignore information not relevant to the query in the Query_context.
+#     Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+#     The output must be a single JSON object inside a markdown code block.
+#     Do not provide any explanation or commentary outside the JSON.
+
+
+# ### Examples:
+
+# **Example 1 (Direct Answer):**
+# Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century. Doc 2:...,Doc 3:...
+# Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+# Query: When was the Arthur's Magazine started?
+# Output: 
+# ``` json
+# {{"type": "answer", "answer": "1844", "doc_score":[1.0,0.9]}}
+# ```
+
+# **Example 2 (Decomposition):**
+# Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner....,Doc 2:...,Doc 3:...,Doc 4:...,Doc 5:...
+# Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+# Query: What is the birhday of the director of A Flame In My Heart?
+# Output: 
+# ``` json
+# {{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?", "doc_score":[0.7,0.4,0.2,0.9]}}
+# ```
+
+# **Example 3 (Entity Extraction):**
+# Query_context: ...
+# Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+# Query: Who is the director of Butcher, Baker, Nightmare Maker?
+# Output: 
+# ``` json 
+# {{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker", "doc_score":[...]}}
+# ```
+# ### Your Task:
+# Query_context: {context}
+# Parent_query of the Query: {parent_query}
+# Query: {query}
+# Output:
+
+# ''')
+
+#     return user_prompt
+
+def get_subqueries_llama3_8b_auto_2wiki():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "...", "doc_score":[...]}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "doc_score":[...]}}
+```
+3. **Entity Extraction**
+If the Query lacks sufficient context to be answered or decomposed, but contains key identifiable entities, extract them as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "...", "doc_score":[...]}}
+```
+
+### Rules:
+for doc_score:
+    Assign relevance scores to each document to indicate how useful they are for solving the query.
+    The score reflects the document's potential relevance to the query. Higher scores indicate documents that contain relevant information.
+    The score is a float number between 0 and 1.
+    The number of the doc_score list should be the same as the number of the documents in the Query_context.
+for action type:
+    Only use "answer" when you are 100% sure the answer is directly supported by the context.
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+
+### Examples:
+
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844", "doc_score":[1.0]}}
+```
+
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner....,Doc 2:...,Doc 3:...,Doc 4:...,Doc 5:...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?", "doc_score":[1.0,0.9,0.8,0.7,0.6]}}
+```
+
+**Example 3 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker", "doc_score":[...]}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+
+''')
+
+    return user_prompt
+
+def get_subqueries_llama3_8b_auto_musique():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "...", "doc_score":[...]}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "doc_score":[...]}}
+```
+3. **Entity Extraction**
+If the Query lacks sufficient context to be answered or decomposed, but contains key identifiable entities, extract them as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "...", "doc_score":[...]}}
+```
+
+### Rules:
+for doc_score:
+    Assign relevance scores to each document to indicate how useful they are for solving the query.
+    The score reflects the document's potential relevance to the query. Higher scores indicate documents that contain relevant information.
+    The score is a float number between 0 and 1.
+    The number of the doc_score list should be the same as the number of the documents in the Query_context.
+for action type:
+    Only use "answer" when you are 100% sure the answer is directly supported by the context.
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+
+### Examples:
+
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844", "doc_score":[1.0]}}
+```
+
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner....,Doc 2:...,Doc 3:...,Doc 4:...,Doc 5:...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?", "doc_score":[1.0,0.9,0.8,0.7,0.6]}}
+```
+
+**Example 3 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker", "doc_score":[...]}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+
+''')
+
+    return user_prompt
+
+
+def get_subqueries_llama3_8b_auto_bamboogle():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "...", "doc_relevant_score":[...]}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered but can be split into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "doc_relevant_score":[...]}}
+```
+3. **Entity Extraction**
+If the Query lacks sufficient context to be answered or decomposed, but contains key identifiable entities, extract them as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "...", "doc_relevant_score":[...]}}
+```
+
+### Rules:
+for doc_relevant_score:
+    Assign relevance scores to each document to indicate how useful they are for solving the query.
+    The score reflects the document's potential relevance to the query. Higher scores indicate documents that contain relevant information.
+    The score is a float number between 0 and 1.
+    The number of the score list should be the same as the number of the documents in the Query_context.
+for action type:
+    Only use "answer" when you are 100% sure the answer is directly supported by the context.
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+
+### Examples:
+
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844", "doc_relevant_score":[1.0]}}
+```
+
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.,Doc 2: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.,Doc 3:...,Doc 4:...,Doc 5:...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?", "doc_relevant_score":[1.0,0.1,0.8,0.6,0.7]}}
+```
+
+**Example 3 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker", "doc_relevant_score":[...]}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+
+''')
+
+    return user_prompt
+
+
+
+def get_subqueries_qwen3_8b_auto_hotpotQA():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "...", "doc_score":[...]}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered,please split the query into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "doc_score":[...]}}
+```
+3. **Entity Extraction**
+If the query contains only one entity information that needs to be clarified, extract the entity and express it as two entities from different perspectives, respond as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "...", "doc_score":[...]}}
+```
+### Rules:
+for doc_score:
+    Assign relevance scores to each document to indicate how useful they are for solving the query.
+    The score reflects the document's potential relevance to the query. Higher scores indicate documents that contain relevant information.
+    The score is a float number between 0 and 1.
+    The number of the doc_score list should be the same as the number of the documents in the Query_context.
+for action type:
+    Only use "answer" when you are 100% sure the answer is directly supported by the context.
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+### Examples:
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844-1846) was an American literary periodical published in Philadelphia in the 19th century.
+Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844", "doc_score":[0.8]}}
+```
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?", "doc_score":[0.9]}}
+```
+**Example 3 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker", "doc_score":[...]}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+        '''
+    )
+    return user_prompt
+
+
+def get_subqueries_qwen3_8b_auto_2wiki():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "...", "doc_score":[...]}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered,please split the query into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "doc_score":[...]}}
+```
+3. **Entity Extraction**
+If the query contains only one entity information that needs to be clarified, extract the entity and express it as two entities from different perspectives, respond as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "...", "doc_score":[...]}}
+```
+### Rules:
+for doc_score:
+    Assign relevance scores to each document to indicate how useful they are for solving the query.
+    The score reflects the document's potential relevance to the query. Higher scores indicate documents that contain relevant information.
+    The score is a float number between 0 and 1.
+    The number of the doc_score list should be the same as the number of the documents in the Query_context.
+for action type:
+    Only use "answer" when you are 100% sure the answer is directly supported by the context.
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+### Examples:
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844-1846) was an American literary periodical published in Philadelphia in the 19th century.
+Parent_query of the Query: Which magazine was started first Arthur's Magazine or First for Women?
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844", "doc_score":[0.8]}}
+```
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?", "doc_score":[0.9]}}
+```
+**Example 3 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker", "doc_score":[...]}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+        '''
+    )
+    return user_prompt
+
+
+def get_subqueries_qwen3_8b_auto_musique():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "...", "doc_score":[...]}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered,please split the query into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "doc_score":[...]}}
+```
+3. **Entity Extraction**
+If the query contains only one entity information that needs to be clarified, extract the entity and express it as two entities from different perspectives, respond as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "...", "doc_score":[...]}}
+```
+### Rules:
+for doc_score:
+    Assign relevance scores to each document to indicate how useful they are for solving the query.
+    The score reflects the document's potential relevance to the query. Higher scores indicate documents that contain relevant information.
+    The score is a float number between 0 and 1.
+    The number of the doc_score list should be the same as the number of the documents in the Query_context.
+for action type:
+    Only use "answer" when you are 100% sure the answer is directly supported by the context.
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+### Examples:
+
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844", "doc_relevant_score":[1.0]}}
+```
+
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.,Doc 2: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.,Doc 3:...,Doc 4:...,Doc 5:...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?", "doc_relevant_score":[1.0,0.1,0.8,0.6,0.7]}}
+```
+
+**Example 3 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker", "doc_relevant_score":[...]}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+
+'''
+    )
+    return user_prompt
+
+
+def get_subqueries_qwen3_8b_auto_bamboogle():
+    user_prompt = (
+'''
+You are given a query along with its parent question and optional context. Your task is to select the correct action type based on the following rules:
+### Available Action Types:
+1. **Direct Answer**  
+If the `Query_context` contains a clear and verifiable answer to the `Query`, respond as:  
+```json
+{{"type": "answer", "answer": "...", "doc_score":[...]}}
+```
+2. **Decomposition**
+If the Query cannot be directly answered,please split the query into two logically related subqueries that together answer the parent query, respond as:
+```json
+{{"type": "decomposition", "subquery1": "...", "subquery2": "...", "doc_score":[...]}}
+```
+3. **Entity Extraction**
+If the query contains only one entity information that needs to be clarified, extract the entity and express it as two entities from different perspectives, respond as:
+```json
+{{"type": "entity", "entity1": "...", "entity2": "...", "doc_score":[...]}}
+```
+### Rules:
+for doc_score:
+    Assign relevance scores to each document to indicate how useful they are for solving the query.
+    The score reflects the document's potential relevance to the query. Higher scores indicate documents that contain relevant information.
+    The score is a float number between 0 and 1.
+    The number of the doc_score list should be the same as the number of the documents in the Query_context.
+for action type:
+    Only use "answer" when you are 100% sure the answer is directly supported by the context.
+    Ignore information not relevant to the query in the Query_context.
+    Ensure subquery1, subquery2, entity1, entity2, and answer are all string values.
+    The output must be a single JSON object inside a markdown code block.
+    Do not provide any explanation or commentary outside the JSON.
+
+### Examples:
+
+**Example 1 (Direct Answer):**
+Query_context: Doc 1: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.Doc 2:...,Doc 3:...
+Query: When was the Arthur's Magazine started?
+Output: 
+``` json
+{{"type": "answer", "answer": "1844", "doc_relevant_score":[1.0,...,...]}}
+```
+
+**Example 2 (Decomposition):**
+Query_context:  Doc 1: A Flame in My Heart is a 1987 French- Swiss drama film directed by Alain Tanner.,Doc 2: Arthur's Magazine (1844–1846) was an American literary periodical published in Philadelphia in the 19th century.,Doc 3:...,Doc 4:...,Doc 5:...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: What is the birhday of the director of A Flame In My Heart?
+Output: 
+``` json
+{{"type": "decomposition", "subquery1": "Who is Alain Tanner?", "subquery2": "What is the birhday of Alain Tanner?", "doc_relevant_score":[1.0,0.1,0.8,0.6,0.7]}}
+```
+
+**Example 3 (Entity Extraction):**
+Query_context: ...
+Parent_query of the Query: Which film has the director born later, A Flame In My Heart or Butcher, Baker, Nightmare Maker?
+Query: Who is the director of Butcher, Baker, Nightmare Maker?
+Output: 
+``` json 
+{{"type": "entity", "entity1": "Butcher, Baker, Nightmare Maker", "entity2": "Director of Butcher, Baker, Nightmare Maker", "doc_relevant_score":[...]}}
+```
+### Your Task:
+Query_context: {context}
+Parent_query of the Query: {parent_query}
+Query: {query}
+Output:
+
+'''
+    )
     return user_prompt

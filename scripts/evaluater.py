@@ -39,7 +39,7 @@ class EvaluationUtils:
             if matches:
                 extracted_text = matches[-1]
                 if mode in ['choose', 'qa']:
-                    inner_pattern = r'\\text\{(.*)\}'
+                    inner_pattern = r'\\text\{(.*?)\}'
                     inner_matches = re.findall(inner_pattern, extracted_text)
                     if inner_matches:
                         extracted_text = inner_matches[-1]
@@ -63,56 +63,122 @@ class EvaluationUtils:
         def lower(text):
             return text.lower()
         return white_space_fix(remove_articles(remove_punc(lower(s))))
+    
+    
+
+
+    @staticmethod
+    def is_labeled_context_tokenwise_matched(
+        context: list[list[str]],
+        labeled_context: list[str],
+        token_threshold: float = 0.75,
+    ) -> bool:
+        """
+        判断 labeled_context 中的每个文档是否出现在 context 中；
+        对比单位为文档，判断文档是否相同使用 token-overlap。
+        """
+        from itertools import chain
+
+        # 扁平化后的每个元素即一个文档
+        flattened_context = list(chain.from_iterable(context))
+
+        if not labeled_context:
+            return False
+
+        matched_paragraphs = 0
+
+        for label in labeled_context:
+            label_tokens = label.strip().split()
+            if not label_tokens:
+                continue
+
+            # 该标注文档是否匹配到某个检索文档
+            matched_this_label = False
+
+            for ctx_doc in flattened_context:
+                ctx_tokens = ctx_doc.strip().split()
+                if not ctx_tokens:
+                    continue
+
+                overlap = len(set(label_tokens) & set(ctx_tokens))
+                match_ratio = overlap / len(label_tokens)
+
+                if match_ratio >= token_threshold:
+                    matched_this_label = True
+                    break
+
+            if matched_this_label:
+                matched_paragraphs += 1
+
+        paragraph_match_ratio = matched_paragraphs / len(labeled_context)
+        return paragraph_match_ratio == 1.0,paragraph_match_ratio
+    
+    @staticmethod
+    def is_labeled_in_context(
+        context: list[str],
+        labeled_context: list[str],
+        token_threshold: float = 0.75,
+    ) -> list[int]:
+        """
+        判断 labeled_context 中的每个文档是否出现在 context 中；
+        对比单位为文档，判断文档是否相同使用 token-overlap。
+        """
+        res_label = [-1]*len(context)
+        if not labeled_context:
+            return res_label
+
+
+        for idy,label in enumerate(labeled_context):
+            label_tokens = label.strip().split()
+            if not label_tokens:
+                continue
+
+
+            for idx,ctx_doc in enumerate(context):
+                ctx_tokens = ctx_doc.strip().split()
+                if not ctx_tokens:
+                    continue
+
+                overlap = len(set(label_tokens) & set(ctx_tokens))
+                match_ratio = overlap / len(label_tokens)
+
+                if match_ratio >= token_threshold:
+                    res_label[idx] = idy
+
+
+
+        return res_label
+
+    @staticmethod
+    def cal_father_hit(context: list[str], labeled_context: list[str],is_father:list[int],doc_ids: list[list[str]]) -> int:
+        father_context = []
+        own_context = []
+        
+        for i, is_father_node in enumerate(is_father):
+            if is_father_node == 1:
+                if i < len(context) and i < len(doc_ids) and doc_ids[i] in labeled_context:
+                    father_context.append(context[i])
+            elif is_father_node == 0:
+                if i < len(context):
+                    own_context.append(context[i])
+        
+        father_res_label = EvaluationUtils.is_labeled_in_context(father_context, labeled_context)
+        own_res_label = EvaluationUtils.is_labeled_in_context(own_context, labeled_context)
+        hit_num = [False]*len(labeled_context)
+        # print("father_res_label:",father_res_label)
+        # print("own_res_label:",own_res_label)
+
+        for idx,labeled_con in enumerate(labeled_context):
+            if idx not in own_res_label:
+                if idx in father_res_label:
+                    hit_num[idx] = True
+        
+        return any(hit_num)
+
+
 
     @staticmethod
     def calculate_metrics(output, labeled_answer, mode, context,labled_context):
-
-        def is_labeled_context_tokenwise_matched(
-            context: list[list[str]],
-            labeled_context: list[str],
-            token_threshold: float = 0.9,
-            paragraph_threshold: float = 1.0
-        ) -> bool:
-            """
-            判断 labeled_context 中的每个段落字符串，其词有多少出现在 context 中。
-            :param context: 三层结构的文档 context（外层为检索轮次）
-            :param labeled_context: 每段为一个目标上下文片段字符串
-            :param token_threshold: 每段中 ≥ 该比例的词匹配成功，才认为该段有效
-            :param paragraph_threshold: 有效段落达到该比例，整体返回 True
-            """
-            from itertools import chain
-
-            # 扁平化 context，所有句子文本合成一个字符串池
-            flattened_context = list(chain.from_iterable(context))
-
-            if not labeled_context:
-                return False
-
-            matched_paragraphs = 0
-
-            for label in labeled_context:
-                tokens = label.strip().split()  # 默认按空格切词
-                if not tokens:
-                    continue
-
-                matched_tokens = sum(
-                    any(token in ctx for ctx in flattened_context)
-                    for token in tokens
-                )
-
-                match_ratio = matched_tokens / len(tokens)
-                if match_ratio >= token_threshold:
-                    # return True
-                    matched_paragraphs += 1
-
-            paragraph_match_ratio = matched_paragraphs / len(labeled_context)
-            final_metric['retrieval_recall'] = paragraph_match_ratio
-            # print(paragraph_match_ratio)
-            if paragraph_match_ratio >= paragraph_threshold:
-                # final_metric['retrieval_recall'] = paragraph_match_ratio
-                return True
-            return False
-        #########################################################
 
         final_metric = {"is_valid_answer": False, "acc": 0, "em": 0, "f1": 0, 'math_equal': 0, 'forget': 0, 'retrieval_recall': 0, 'label_in': 0}
 
@@ -143,12 +209,13 @@ class EvaluationUtils:
 
                 for k in ["em", "acc", "f1"]:
                     final_metric[k] = max(eval(k), final_metric[k])
-            label_in = is_labeled_context_tokenwise_matched(context, labled_context)
-
+            label_in,recall = EvaluationUtils.is_labeled_context_tokenwise_matched(context, labled_context)
+            final_metric['retrieval_recall'] = recall
             if label_in:
                 final_metric['label_in'] = 1
 
-            if label_in and em == 0:
+            if label_in and final_metric['em'] == 0:
+            # if label_in and em == 0:
                 final_metric['forget'] = 1
 
             # final_metric['forget'] = int(forget)
@@ -174,12 +241,14 @@ class EvaluationUtils:
 
                 for k in ["em", "acc", "f1"]:
                     final_metric[k] = max(eval(k), final_metric[k])
-            label_in = is_labeled_context_tokenwise_matched(context, labled_context)
+            label_in,recall = EvaluationUtils.is_labeled_context_tokenwise_matched(context, labled_context)
+            final_metric['retrieval_recall'] = recall
 
             if label_in:
                 final_metric['label_in'] = 1
 
-            if label_in and em == 0:
+            # if label_in and em == 0:
+            if label_in and final_metric['em'] == 0:
                 final_metric['forget'] = 1
 
             # final_metric['forget'] = int(forget)
@@ -300,6 +369,101 @@ class GeneralEvaluationStrategy(BaseEvaluationStrategy):
             my_method_valid = (pred_answer != '' and not (mode == 'choose' and self.dataset_name == 'gpqa' and len(pred_answer) > 1))
             self._update_metrics(metric, item, my_method_valid)
     
+    def prepare_samples_memory(self, filtered_data, input_list, output_list,retrieval_info,is_father_stats):
+
+        def dedup_per_query_rounds(all_queries: List[List[List[Tuple[str, str]]]],is_father_stats) -> List[List[List[str]]]:
+            deduped_all = []
+            is_fahter_all = []
+            doc_id_all = []
+            for query_idx, query_rounds in enumerate(all_queries):
+                deduped_rounds = []
+
+                is_father = is_father_stats.get(query_idx, {}).get("is_father", [])
+                is_father_list = []
+                doc_id_list = []
+                # print("is_father:",is_father)
+                # print("content:",query_rounds)
+                for round_idx, round_docs in enumerate(query_rounds):
+                    filtered = []
+                    # if isinstance(round_docs, tuple):
+                    #     round_docs = [round_docs] 
+                    
+                    if round_idx >= 1:
+                        is_father_node = is_father[round_idx-1]
+                    else:
+                        is_father_node = [0]*len(round_docs)
+                    for doc_id, doc_content in round_docs:
+                        filtered.append(doc_content)
+                        doc_id_list.append(doc_id) 
+                    deduped_rounds.append(filtered)  # 即使是空轮，也要保留空列表
+                    is_father_list.append(is_father_node)
+                deduped_all.append(deduped_rounds)
+                is_fahter_all.append(is_father_list)
+                doc_id_all.append(doc_id_list)  
+            return deduped_all,is_fahter_all,doc_id_all
+
+        def dedup_per_query_rounds_origin(all_queries: List[List[List[Tuple[str, str]]]]) -> List[List[List[str]]]:
+            deduped_all = []
+            for query_idx, query_rounds in enumerate(all_queries):
+                seen_ids = set()
+                deduped_rounds = []
+
+                for round_idx, round_docs in enumerate(query_rounds):
+                    filtered = []
+                    # if isinstance(round_docs, tuple):
+                    #     round_docs = [round_docs] 
+                    for doc_id, doc_content in round_docs:
+                        if doc_id not in seen_ids:
+                            seen_ids.add(doc_id)
+                            filtered.append(doc_content)
+                    deduped_rounds.append(filtered)  # 即使是空轮，也要保留空列表
+                deduped_all.append(deduped_rounds)
+
+            return deduped_all
+        self.retrieval_info = dedup_per_query_rounds_origin(retrieval_info)
+        self.filtered_data = filtered_data
+        self.len_input = len(input_list)
+
+
+        for idx, (item, input_prompt, result) in enumerate(zip(filtered_data, input_list, output_list)):
+            item['Output'] = result if isinstance(result, str) else result.outputs[0].text
+            labled_context, labeled_answer, mode = self._get_info(item)
+            context = self.retrieval_info[idx]
+            
+            
+            metric, pred_answer = EvaluationUtils.calculate_metrics(
+                item['Output'], labeled_answer, mode, context,labled_context
+            )
+            
+            item.update({'Pred_Answer': pred_answer, 'Metrics': metric, 'Input':input_prompt})
+
+            my_method_valid = (pred_answer != '' and not (mode == 'choose' and self.dataset_name == 'gpqa' and len(pred_answer) > 1))
+            self._update_metrics(metric, item, my_method_valid)
+        
+        self.retrieval_info, self.is_father_info,self.doc_id_info = dedup_per_query_rounds(retrieval_info,is_father_stats)
+        self.filtered_data = filtered_data
+        self.len_input = len(input_list)
+
+        final_father_hit_avg = 0
+        for idx, (item, input_prompt, result) in enumerate(zip(filtered_data, input_list, output_list)):
+            item['Output'] = result if isinstance(result, str) else result.outputs[0].text
+            labled_context, labeled_answer, mode = self._get_info(item)
+            contexts = self.retrieval_info[idx]
+            fathers = self.is_father_info[idx]
+            doc_ids = self.doc_id_info[idx]
+            father_hit_avg = 0
+            for idy,context in enumerate(contexts):
+                father = fathers[idy]
+                doc_id_now = doc_ids[idy]
+                father_hit = EvaluationUtils.cal_father_hit(context, labled_context,father,doc_id_now)
+                if father_hit:
+                    father_hit_avg = 1
+            
+            final_father_hit_avg += father_hit_avg
+        final_father_hit_avg = final_father_hit_avg/self.len_input if self.len_input>0 else 0
+        return final_father_hit_avg
+
+            
     def calculate_all_metrics(self):
         overall = {
             'em': np.mean(self.metrics_data['em']),
@@ -341,6 +505,43 @@ class GeneralEvaluationStrategy(BaseEvaluationStrategy):
         
         with open(os.path.join(output_dir, metrics_name), 'w') as f:
             json.dump(self.calculate_all_metrics(), f, indent=4)
+
+    def save_results_memory(self, output_dir, method, split, total_time, start_time, retrieval_num, avg_tree_depth=None, apply_backoff=False,overall_father_avg=None, overall_brother_avg=None, final_father_hit_avg=None):
+        self.retrieval_num = retrieval_num
+        self.total_time = total_time
+        t = start_time.strftime("%m%d.%H:%M")
+        result_name = f"{method}.{split}.{t}.json"
+        metrics_name = f'{method}.{split}.{t}.metrics.json'
+
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        with open(os.path.join(output_dir, result_name), 'w') as f:
+            json.dump(self.filtered_data, f, indent=4)
+        
+        metrics = self.calculate_all_metrics()
+        if avg_tree_depth is not None:
+            if 'overall' in metrics:
+                metrics['overall']['avg_tree_depth'] = avg_tree_depth
+            else:
+                metrics['avg_tree_depth'] = avg_tree_depth
+        if overall_father_avg is not None:
+            if 'overall' in metrics:
+                metrics['overall']['overall_father_avg'] = overall_father_avg
+            else:
+                metrics['overall_father_avg'] = overall_father_avg
+        if overall_brother_avg is not None:
+            if 'overall' in metrics:
+                metrics['overall']['overall_brother_avg'] = overall_brother_avg
+            else:
+                metrics['overall_brother_avg'] = overall_brother_avg
+        if final_father_hit_avg is not None:
+            if 'overall' in metrics:
+                metrics['overall']['final_father_hit_avg'] = final_father_hit_avg
+            else:
+                metrics['final_father_hit_avg'] = final_father_hit_avg
+        with open(os.path.join(output_dir, metrics_name), 'w') as f:
+            json.dump(metrics, f, indent=4)
 
 class EvaluationStrategyFactory:
     STRATEGY_MAP = {
