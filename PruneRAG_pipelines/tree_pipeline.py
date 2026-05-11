@@ -380,7 +380,7 @@ class Generator:
 
         start_time = datetime.now()
         outputs = self.llm.generate(prompts, params)
-        self.total_time = (datetime.now() - start_time).total_seconds()
+        self.total_time += (datetime.now() - start_time).total_seconds()
 
         print("Finish generating subqueries, total outputs:", len(outputs))
         result: List[Dict[str, Union[str, List[str]]]] = []
