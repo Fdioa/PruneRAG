@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="PruneRAG: Confidence-Guided Query Decomposition Trees for Efficient Retrieval-Augmented Generation">
+  <title>PruneRAG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="PruneRAG home">PruneRAG</a>
+    <nav class="nav" aria-label="Page navigation">
+      <a href="#method">Method</a>
+      <a href="#results">Results</a>
+      <a href="#citation">Citation</a>
+      <a href="#qr">QR</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">WWW 2026 · Retrieval-Augmented Generation</p>
+        <h1><span>PruneRAG</span> Confidence-Guided Query Decomposition Trees for Efficient Retrieval-Augmented Generation</h1>
+        <p class="lead">
+          PruneRAG builds a query decomposition tree, accepts reliable answers through confidence-guided pruning,
+          and switches to entity-level retrieval when decomposition is no longer effective.
+        </p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/Fdioa/PruneRAG" target="_blank" rel="noreferrer">GitHub</a>
+          <a class="button" href="https://arxiv.org/abs/2601.11024" target="_blank" rel="noreferrer">arXiv</a>
+          <a class="button" href="../slides/" target="_blank" rel="noreferrer">Slides</a>
+        </div>
+      </div>
+
+      <aside class="hero-panel" aria-label="Key results">
+        <img class="hero-figure" src="assets/img/framework.png" alt="PruneRAG framework preview">
+        <div class="metric">
+          <strong>+5.45%</strong>
+          <span>average F1 over strongest baselines on three multi-hop QA benchmarks</span>
+        </div>
+        <div class="metric">
+          <strong>4.9x</strong>
+          <span>faster than mainstream multi-retrieval baselines</span>
+        </div>
+        <div class="metric">
+          <strong>-20.8%</strong>
+          <span>average EFR reduction against mainstream multi-retrieval baselines</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="section" id="overview">
+      <div class="section-heading">
+        <p class="eyebrow">Abstract</p>
+        <h2>Reliable reasoning with less redundant retrieval.</h2>
+      </div>
+      <p class="abstract">
+        Retrieval-augmented generation improves factual question answering by retrieving external evidence,
+        but multi-turn RAG systems often suffer from evidence forgetting and redundant retrieval. PruneRAG
+        addresses these issues with adaptive node expansion, confidence-guided decisions, and fine-grained
+        entity retrieval. Together, these components preserve salient evidence during multi-hop reasoning
+        while reducing unnecessary query expansion and inference cost.
+      </p>
+    </section>
+
+    <section class="section split" id="method">
+      <div class="section-heading">
+        <p class="eyebrow">Method</p>
+        <h2>Query decomposition tree with confidence-guided pruning.</h2>
+        <p>
+          Each node is adaptively resolved as an answer, decomposed into sub-queries, or converted into
+          entity-based retrieval. Low-confidence answers are rejected before they can propagate errors.
+        </p>
+      </div>
+      <figure class="figure">
+        <img src="assets/img/framework.png" alt="PruneRAG framework diagram">
+        <figcaption>Overall framework of PruneRAG.</figcaption>
+      </figure>
+    </section>
+
+    <section class="section cards">
+      <article class="card">
+        <span>01</span>
+        <h3>Adaptive Node Expansion</h3>
+        <p>Controls tree width and depth by deciding whether a query should be answered, decomposed, or abstracted into entities.</p>
+      </article>
+      <article class="card">
+        <span>02</span>
+        <h3>Confidence-Guided Pruning</h3>
+        <p>Computes answer confidence from token-level log probabilities and accepts only reliable candidate answers.</p>
+      </article>
+      <article class="card">
+        <span>03</span>
+        <h3>Fine-Grained Retrieval</h3>
+        <p>Extracts entity-level anchors to retrieve precise evidence when further query decomposition becomes ineffective.</p>
+      </article>
+    </section>
+
+    <section class="section results-section" id="results">
+      <div class="section-heading">
+        <p class="eyebrow">Results</p>
+        <h2>Results: better accuracy, lower forgetting, fewer retrieval calls.</h2>
+      </div>
+      <div class="result-grid">
+        <figure class="figure result-figure tall">
+          <img src="assets/img/evidence-forgetting.png" alt="Evidence forgetting comparison">
+          <figcaption>Evidence forgetting in prior multi-turn RAG and PruneRAG.</figcaption>
+        </figure>
+        <figure class="figure result-figure">
+          <div class="image-stage">
+            <img src="assets/img/retrieval-efficiency.png" alt="Retrieval efficiency bubble chart">
+          </div>
+          <figcaption>Retrieval efficiency on HotpotQA.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section split">
+      <div class="section-heading">
+        <p class="eyebrow">Case Study</p>
+        <h2>Pruning unreliable branches recovers a coherent reasoning path.</h2>
+        <p>
+          The case study illustrates how PruneRAG suppresses low-quality outputs, preserves retrieved evidence,
+          and reaches the correct final answer through bottom-up backtracing.
+        </p>
+      </div>
+      <figure class="figure">
+        <img src="assets/img/case-study.png" alt="Case study comparing ProbTree and PruneRAG">
+        <figcaption>PruneRAG prunes errors while ProbTree suffers from evidence forgetting.</figcaption>
+      </figure>
+    </section>
+
+    <section class="section citation" id="citation">
+      <div class="section-heading">
+        <p class="eyebrow">Citation</p>
+        <h2>BibTeX</h2>
+      </div>
+      <pre><code>@article{jiao2026prunerag,
+  title={PruneRAG: Confidence-Guided Query Decomposition Trees for Efficient Retrieval-Augmented Generation},
+  author={Shuguang Jiao, Xinyu Xiao, Yunfan Wei, Shuhan Qi, Chengkai Huang, Quan Z. Michael Sheng and Lina Yao},
+  conference={The Web Conference 2026 (WWW)},
+  year={2026}
+}</code></pre>
+    </section>
+
+    <section class="section qr-section" id="qr">
+      <div>
+        <p class="eyebrow">Share</p>
+        <h2>Project page QR code</h2>
+        <p>The QR code points to the planned GitHub Pages URL. If you deploy under another domain, regenerate this image with the final URL.</p>
+        <a class="text-link" href="https://fdioa.github.io/PruneRAG/" target="_blank" rel="noreferrer">https://fdioa.github.io/PruneRAG/</a>
+      </div>
+      <img class="qr" src="assets/project-page-qr.png" alt="QR code for the PruneRAG project page">
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>PruneRAG</span>
+    <a href="https://github.com/Fdioa/PruneRAG" target="_blank" rel="noreferrer">github.com/Fdioa/PruneRAG</a>
+  </footer>
+</body>
+</html>
