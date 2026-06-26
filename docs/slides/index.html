@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PruneRAG: Confidence-Guided Query Decomposition Trees for Efficient RAG</title>
+<link rel="stylesheet" href="assets/fonts.css">
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/animations/animations.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="tpl-prunerag">
+<div class="deck">
+
+  <!-- Slide 1: Title -->
+  <section class="slide" data-title="Title">
+    <p class="kicker">WWW '26 · Dubai, April 13–17, 2026</p>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up"><span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">PruneRAG</span>: Confidence-Guided<br>Query Decomposition Trees for<br>Efficient Retrieval-Augmented Generation</h1>
+    <div class="mt-m row" style="gap:24px;flex-wrap:wrap">
+      <span class="tag tag-green">Shuguang Jiao</span>
+      <span class="tag">Xinyu Xiao</span>
+      <span class="tag">Yunfan Wei</span>
+      <span class="tag">Shuhan Qi*</span>
+      <span class="tag">Chengkai Huang*</span>
+      <span class="tag">Quan Z. Sheng</span>
+      <span class="tag">Lina Yao</span>
+    </div>
+    <p class="dim mt-m">Harbin Institute of Technology, Shenzhen · South China University of Technology · Macquarie University · UNSW · CSIRO's Data61</p>
+    <div class="deck-footer"><span class="mono">github.com/Fdioa/PruneRAG</span><span class="slide-number" data-current="1" data-total="20"></span></div>
+  </section>
+
+  <!-- Slide 2: Outline -->
+  <section class="slide" data-title="Outline">
+    <p class="kicker">outline</p>
+    <h2 class="h2">Talk Overview</h2>
+    <div class="stack mt-l">
+      <div class="step"><div class="step-num">1</div><div class="step-content"><div class="step-title">Background & Motivation</div><div class="step-desc">RAG failures: evidence forgetting & inefficiency</div></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-title">PruneRAG Framework</div><div class="step-desc">Tree structure, adaptive expansion, confidence pruning, fine-grained retrieval</div></div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Experiments & Analysis</div><div class="step-desc">Main results, ablation, efficiency, hyperparameters</div></div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Conclusion & Future Work</div><div class="step-desc">Takeaways and open directions</div></div></div>
+    </div>
+  </section>
+
+  <!-- Slide 3: Background -->
+  <section class="slide" data-title="Background">
+    <p class="kicker">background</p>
+    <h2 class="h2">Retrieval-Augmented Generation (RAG)</h2>
+    <div class="grid g2 mt-l">
+      <div>
+        <p class="lede">RAG enhances LLMs by retrieving external knowledge during inference — the dominant paradigm for knowledge-intensive QA tasks.</p>
+        <div class="stack mt-m">
+          <div class="highlight">
+            <p style="color:var(--text-1);font-size:16px"><strong>Multi-hop QA challenge:</strong> Complex questions require integrating evidence across multiple documents via iterative retrieval and reasoning.</p>
+          </div>
+        </div>
+      </div>
+      <div class="stack" style="gap:20px">
+        <div class="card card-accent"><h4>Chain-based RAG</h4><p class="dim">Linear step-by-step decomposition (IRCoT, ReAct, Search-o1)</p></div>
+        <div class="card card-blue"><h4>Tree-based RAG</h4><p class="dim">Explore multiple reasoning paths (ConTReGen, RAG-Star)</p></div>
+        <div class="card card-red"><h4>Common weakness</h4><p class="dim">No confidence-guided control to decide when to stop, split, or refine</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 4: Problem 1 - Evidence Forgetting (with Figure 1) -->
+  <section class="slide" data-title="Problem: Evidence Forgetting">
+    <p class="kicker">motivation · problem 1</p>
+    <h2 class="h2">Evidence Forgetting vs. PruneRAG</h2>
+    <div class="grid g2 mt-m" style="align-items:start">
+      <div>
+        <p class="lede">The model retrieves key evidence but <strong style="color:var(--accent-3)">fails to leverage it</strong> in later reasoning steps.</p>
+        <div class="stack mt-m">
+          <p class="dim">- Early evidence diluted by accumulated context</p>
+          <p class="dim">- Error propagation from intermediate steps</p>
+          <p class="dim">- EFR > 46% on HotpotQA for mainstream baselines</p>
+        </div>
+        <div class="highlight mt-m">
+          <p style="color:var(--accent);font-size:14px;font-weight:600">PruneRAG rejects low-quality answers and reflects to generate correct ones, preventing downward error propagation.</p>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:center;align-items:center;height:100%">
+        <img src="img/fig1-1.png" alt="Figure 1: Multi-turn RAG vs PruneRAG" style="max-width:100%;max-height:420px;border-radius:var(--radius);border:1px solid var(--border)">
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 5: Problem 2 - Inefficiency -->
+  <section class="slide" data-title="Problem: Inefficiency">
+    <p class="kicker">motivation · problem 2</p>
+    <h2 class="h2">Inefficiency in Existing Methods</h2>
+    <div class="grid g3 mt-l">
+      <div class="card card-red">
+        <h4>Uncontrolled Expansion</h4>
+        <p class="dim mt-s">Tree-based methods generate many low-value nodes without disciplined expansion control.</p>
+        <div class="stat mt-m" style="font-size:48px">8,216ms</div>
+        <p class="stat-label">RAG-Star latency per query</p>
+      </div>
+      <div class="card card-red">
+        <h4>Redundant Retrieval</h4>
+        <p class="dim mt-s">Same information retrieved multiple times across different reasoning branches.</p>
+        <div class="stat mt-m" style="font-size:48px">6.73</div>
+        <p class="stat-label">RAG-Star avg retrieval calls</p>
+      </div>
+      <div class="card card-red">
+        <h4>No Confidence Signal</h4>
+        <p class="dim mt-s">Lacking a principled criterion to accept good answers early or reject bad ones.</p>
+        <div class="stat mt-m" style="font-size:48px">91.6%</div>
+        <p class="stat-label">ProbTree EFR on MuSiQue</p>
+      </div>
+    </div>
+    <p class="dim mt-l tc">Existing methods lack a <strong style="color:#fff">confidence-guided control mechanism</strong> that decides when to stop, when to split, and when to refine retrieval.</p>
+  </section>
+
+  <!-- Slide 6: Our Solution Overview (with Figure 2 - Framework) -->
+  <section class="slide" data-title="PruneRAG Overview">
+    <p class="kicker">our approach</p>
+    <h2 class="h2">PruneRAG: Overall Framework</h2>
+    <div style="display:flex;justify-content:center;align-items:center;margin-top:20px">
+      <img src="img/fig2-1.png" alt="Figure 2: PruneRAG Framework" style="max-width:80%;max-height:380px;border-radius:var(--radius);border:1px solid var(--border)">
+    </div>
+    <div class="grid g3 mt-m">
+      <div class="card card-accent" style="padding:16px 20px">
+        <h4 style="font-size:15px">Adaptive Node Expansion</h4>
+        <p class="dim" style="font-size:13px">Regulates width/depth dynamically</p>
+      </div>
+      <div class="card card-blue" style="padding:16px 20px">
+        <h4 style="font-size:15px">Confidence-Guided Pruning</h4>
+        <p class="dim" style="font-size:13px">Accept reliable, reject uncertain</p>
+      </div>
+      <div class="card card-purple" style="padding:16px 20px">
+        <h4 style="font-size:15px">Fine-Grained Retrieval</h4>
+        <p class="dim" style="font-size:13px">Entity-level anchors for precision</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 7: Tree Structure -->
+  <section class="slide" data-title="Tree Structure">
+    <p class="kicker">method · tree structure</p>
+    <h2 class="h2">Query Decomposition Tree</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <h4 style="color:var(--accent-2);margin-bottom:16px">Query Node</h4>
+        <div class="formula formula-compact">
+          <span class="math"><i>N</i><sub>q</sub> = (<i>q</i>, <i>d</i>, <i>a</i>)</span>
+        </div>
+        <p class="dim">q = sub-query, d = retrieved documents, a = candidate answer</p>
+        <h4 style="color:var(--accent-4);margin-top:24px;margin-bottom:16px">Entity Node</h4>
+        <div class="formula formula-compact">
+          <span class="math"><i>N</i><sub>e</sub> = (<i>e</i>, <i>d</i>)</span>
+        </div>
+        <p class="dim">e = salient entities, d = documents retrieved via entities</p>
+        <p class="dim mt-m" style="font-style:italic">Entity nodes are terminal — they handle fallback cases where a query is neither answerable nor decomposable.</p>
+      </div>
+      <div class="card" style="padding:32px">
+        <h4 style="color:var(--accent);margin-bottom:20px">Example Tree</h4>
+        <div class="stack" style="gap:10px;font-size:13px">
+          <div class="tree-node node-query" style="font-size:13px">Q: "Compare directors of film A & B"</div>
+          <div style="display:flex;gap:16px;padding-left:20px;margin-top:8px">
+            <div class="stack" style="gap:8px">
+              <div class="tree-node node-query" style="font-size:12px">q1: "Director of film A?"</div>
+              <div style="padding-left:16px"><div class="tree-node node-answer" style="font-size:12px">Answer ✓ (high conf)</div></div>
+            </div>
+            <div class="stack" style="gap:8px">
+              <div class="tree-node node-query" style="font-size:12px">q2: "Director of film B?"</div>
+              <div style="padding-left:16px"><div class="tree-node node-entity" style="font-size:12px">Entity: ["film B", "director"]</div></div>
+            </div>
+          </div>
+          <div style="margin-top:12px;text-align:center">
+            <span style="color:var(--text-3);font-size:12px">↑ Bottom-up backtracing → Final Answer</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 8: Adaptive Node Expansion -->
+  <section class="slide" data-title="Adaptive Expansion">
+    <p class="kicker">method · adaptive expansion</p>
+    <h2 class="h2">Adaptive Node Expansion</h2>
+    <p class="lede mt-m">Three-way decision for each node based on context sufficiency:</p>
+    <div class="formula formula-cases mt-l">
+      <div class="math formula-head"><i>f</i><sub>decompose</sub>(<i>q</i>, <i>d</i>, <i>p</i>) =</div>
+      <div class="cases">
+        <div class="case-row">
+          <span class="case-value">("answer", <i>A</i>)</span>
+          <span class="case-if">if</span>
+          <span class="case-cond">Ans(<i>q</i>)</span>
+          <span class="case-note">context is sufficient</span>
+        </div>
+        <div class="case-row">
+          <span class="case-value">("query", <i>q</i><sub>1</sub>, <i>q</i><sub>2</sub>)</span>
+          <span class="case-if">if</span>
+          <span class="case-cond">¬Ans(<i>q</i>) ∧ Spl(<i>q</i>)</span>
+          <span class="case-note">decomposable</span>
+        </div>
+        <div class="case-row">
+          <span class="case-value">("entity", <i>e</i><sub>1</sub>, <i>e</i><sub>2</sub>)</span>
+          <span class="case-if">if</span>
+          <span class="case-cond">¬Ans(<i>q</i>) ∧ ¬Spl(<i>q</i>)</span>
+          <span class="case-note">extract entities</span>
+        </div>
+      </div>
+    </div>
+    <div class="grid g3 mt-l">
+      <div class="card card-accent" style="text-align:center">
+        <div style="font-size:36px;margin-bottom:12px">✓</div>
+        <h4>Answer</h4>
+        <p class="dim mt-s">Sufficient evidence → generate answer, stop expansion</p>
+      </div>
+      <div class="card card-blue" style="text-align:center">
+        <div style="font-size:36px;margin-bottom:12px">⇅</div>
+        <h4>Decompose</h4>
+        <p class="dim mt-s">Complex query → split into 2 sub-queries, continue recursion</p>
+      </div>
+      <div class="card card-purple" style="text-align:center">
+        <div style="font-size:36px;margin-bottom:12px">⊙</div>
+        <h4>Entity</h4>
+        <p class="dim mt-s">Cannot decompose → extract key entities for targeted retrieval</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 9: Confidence-Guided Pruning -->
+  <section class="slide" data-title="Confidence Pruning">
+    <p class="kicker">method · confidence pruning</p>
+    <h2 class="h2">Confidence-Guided Pruning</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <p class="lede">Compute answer confidence from token-level log probabilities:</p>
+        <div class="formula formula-display mt-m">
+          <span class="math">Confidence(<i>A</i>) = exp</span>
+          <span class="paren">(</span>
+          <span class="frac"><span>1</span><span>|<i>A</i>|</span></span>
+          <span class="operator">·</span>
+          <span class="sum"><span class="sum-top">|<i>A</i>|</span><span class="sum-symbol">Σ</span><span class="sum-bottom"><i>i</i>=1</span></span>
+          <span class="math">log&nbsp;<i>P</i>(<i>a</i><sub>i</sub> | <i>a</i><sub>&lt;i</sub>, <i>q</i>, <i>d</i>)</span>
+          <span class="paren">)</span>
+        </div>
+        <div class="stack mt-l" style="gap:12px">
+          <div class="step"><div class="step-num">1</div><div class="step-content"><div class="step-desc">Compute Confidence(A) for candidate answer</div></div></div>
+          <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-desc">If Confidence(A) ≥ τ<sub>A</sub> → <strong style="color:var(--accent)">Accept</strong>, mark as answer leaf</div></div></div>
+          <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-desc">If Confidence(A) < τ<sub>A</sub> → <strong style="color:var(--accent-3)">Reject</strong>, continue decompose or entity extraction</div></div></div>
+        </div>
+      </div>
+      <div class="card" style="padding:28px">
+        <h4 style="color:var(--accent);margin-bottom:20px">Why this works</h4>
+        <div class="stack" style="gap:16px">
+          <div class="highlight">
+            <p style="color:var(--text-1);font-size:14px"><strong>High confidence</strong> = model is sure about generation → reliable answer, stop early</p>
+          </div>
+          <div class="highlight-blue">
+            <p style="color:var(--text-1);font-size:14px"><strong>Low confidence</strong> = model is uncertain → likely hallucination, reject and explore further</p>
+          </div>
+          <p class="dim" style="font-size:14px">This prevents error propagation and reduces invalid expansions — the key mechanism for mitigating evidence forgetting.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 10: Fine-Grained Retrieval -->
+  <section class="slide" data-title="Fine-Grained Retrieval">
+    <p class="kicker">method · fine-grained retrieval</p>
+    <h2 class="h2">Fine-Grained Entity Retrieval</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <p class="lede">When a query can neither be answered nor decomposed further:</p>
+        <div class="stack mt-m" style="gap:16px">
+          <p class="dim">1. Treat query as the minimal semantic unit</p>
+          <p class="dim">2. Extract key entities (persons, locations, events)</p>
+          <p class="dim">3. Use entities as structured retrieval anchors</p>
+          <p class="dim">4. Targeted search in the knowledge corpus</p>
+        </div>
+        <div class="highlight mt-m">
+          <p style="color:var(--text-1);font-size:14px"><strong>Example:</strong> "Who is Danny Welch's employer?"<br>→ Entities: <span class="tag tag-blue" style="font-size:11px">Danny Welch</span> <span class="tag tag-blue" style="font-size:11px">Employer of Danny Welch</span></p>
+        </div>
+      </div>
+      <div>
+        <div class="card card-purple">
+          <h4>Benefits</h4>
+          <div class="stack mt-m" style="gap:12px">
+            <p class="dim">✦ Reduces noise in retrieval queries</p>
+            <p class="dim">✦ Improves retrieval specificity and precision</p>
+            <p class="dim">✦ Preserves semantic completeness</p>
+            <p class="dim">✦ Stabilizes the overall reasoning process</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 11: Bottom-Up Backtracing -->
+  <section class="slide" data-title="Backtracing">
+    <p class="kicker">method · aggregation</p>
+    <h2 class="h2">Bottom-Up Tree Backtracing</h2>
+    <div class="grid g3 mt-m">
+      <div class="card card-accent" style="text-align:center">
+        <h4>Answer Leaf</h4>
+        <p class="dim mt-s">Return stored high-confidence answer</p>
+        <div class="formula formula-mini mt-s"><span class="math">Backtrace(<i>N</i>) = <i>a</i></span></div>
+      </div>
+      <div class="card card-purple" style="text-align:center">
+        <h4>Entity Leaf</h4>
+        <p class="dim mt-s">Summarize retrieved documents</p>
+        <div class="formula formula-mini mt-s"><span class="math">Backtrace(<i>N</i>) = summary(<i>d</i>)</span></div>
+      </div>
+      <div class="card card-blue" style="text-align:center">
+        <h4>Internal Node</h4>
+        <p class="dim mt-s">Aggregate children results</p>
+        <div class="formula formula-mini mt-s"><span class="math">Backtrace(<i>N</i>) = agg(children)</span></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;margin-top:20px">
+      <img src="img/case_study-1.png" alt="Case Study: PruneRAG vs ProbTree" style="max-width:88%;max-height:280px;border-radius:var(--radius);border:1px solid var(--border)">
+      <p class="dim mt-s" style="font-size:13px">Case study: ProbTree suffers from evidence forgetting; PruneRAG prunes errors and recovers the correct reasoning chain.</p>
+    </div>
+  </section>
+
+  <!-- Slide 12: Algorithm -->
+  <section class="slide" data-title="Algorithm">
+    <p class="kicker">method · inference procedure</p>
+    <h2 class="h2">PruneRAG Inference Algorithm</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div class="card" style="padding:28px">
+        <h4 style="color:var(--accent-2);margin-bottom:16px">Step 1: Top-Down Construction</h4>
+        <div class="stack" style="gap:10px;font-size:14px">
+          <p class="dim">Initialize root node with complex query q</p>
+          <p class="dim"><strong style="color:var(--text-1)">While queue not empty:</strong></p>
+          <p class="dim" style="padding-left:16px">• Retrieve top-k documents</p>
+          <p class="dim" style="padding-left:16px">• Generate candidate answer + confidence</p>
+          <p class="dim" style="padding-left:16px">• If conf ≥ τ<sub>A</sub> → mark as answer leaf</p>
+          <p class="dim" style="padding-left:16px">• Else if decomposable → create sub-query children</p>
+          <p class="dim" style="padding-left:16px">• Else → create entity node</p>
+        </div>
+      </div>
+      <div class="card" style="padding:28px">
+        <h4 style="color:var(--accent);margin-bottom:16px">Step 2: Bottom-Up Backtracing</h4>
+        <div class="stack" style="gap:10px;font-size:14px">
+          <p class="dim"><strong style="color:var(--text-1)">Process leaves to root:</strong></p>
+          <p class="dim" style="padding-left:16px">• Answer nodes → return stored answer</p>
+          <p class="dim" style="padding-left:16px">• Entity nodes → summarize evidence</p>
+          <p class="dim" style="padding-left:16px">• Internal nodes → aggregate children results</p>
+          <p class="dim" style="padding-left:16px">• Root outputs final answer a*</p>
+        </div>
+        <div class="highlight mt-m">
+          <p style="color:var(--text-1);font-size:13px"><strong>Key:</strong> Pruning reduces unnecessary exploration; backtracing guarantees coherent evidence aggregation.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 13: EFR Metric -->
+  <section class="slide" data-title="EFR Metric">
+    <p class="kicker">evaluation · new metric</p>
+    <h2 class="h2">Evidence Forgetting Rate (EFR)</h2>
+    <p class="lede mt-m">A new diagnostic metric to quantify evidence misuse:</p>
+    <div class="formula formula-display mt-l">
+      <span class="math">EFR =</span>
+      <span class="frac"><span>1</span><span><i>N</i></span></span>
+      <span class="operator">·</span>
+      <span class="sum"><span class="sum-top"><i>N</i></span><span class="sum-symbol">Σ</span><span class="sum-bottom"><i>i</i>=1</span></span>
+      <span class="indicator">𝟙</span>
+      <span class="math">{ <i>G</i><sub>i</sub> ⊆ <i>d</i><sub>i</sub> ∧ <i>a</i><sub>i</sub> ≠ <i>a</i><sub>i</sub><sup>*</sup> }</span>
+    </div>
+    <div class="grid g2 mt-l">
+      <div>
+        <div class="stack" style="gap:12px">
+          <p class="dim"><strong style="color:var(--text-1)">G<sub>i</sub></strong> — golden evidence set (all required documents)</p>
+          <p class="dim"><strong style="color:var(--text-1)">d<sub>i</sub></strong> — all documents retrieved across rounds</p>
+          <p class="dim"><strong style="color:var(--text-1)">a<sub>i</sub></strong> — model's predicted answer</p>
+          <p class="dim"><strong style="color:var(--text-1)">a<sub>i</sub>*</strong> — ground-truth answer</p>
+        </div>
+      </div>
+      <div class="highlight-blue">
+        <p style="color:var(--text-1);font-size:15px"><strong>Interpretation:</strong> EFR measures the proportion of cases where the model has <em>already retrieved</em> all golden evidence but still gives the <em>wrong</em> answer.</p>
+        <p class="dim mt-s" style="font-size:14px">High EFR = evidence is retrieved but not utilized → forgetting problem.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 14: Experimental Setup -->
+  <section class="slide" data-title="Setup">
+    <p class="kicker">experiments · setup</p>
+    <h2 class="h2">Experimental Setup</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <h4 style="color:var(--accent-2);margin-bottom:16px">Datasets</h4>
+        <div class="stack" style="gap:8px">
+          <p class="dim">• <strong style="color:var(--text-1)">HotpotQA</strong> — multi-hop, cross-document</p>
+          <p class="dim">• <strong style="color:var(--text-1)">2WikiMultihopQA</strong> — structured multi-hop</p>
+          <p class="dim">• <strong style="color:var(--text-1)">MuSiQue</strong> — compositional reasoning</p>
+          <p class="dim">• <strong style="color:var(--text-1)">Bamboogle</strong> — instruction-style QA</p>
+          <p class="dim">• <strong style="color:var(--text-1)">GPQA</strong> — graduate-level reasoning</p>
+        </div>
+        <h4 style="color:var(--accent-2);margin-top:24px;margin-bottom:16px">Backbone Models</h4>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <span class="tag">Llama-3.1-8B-Instruct</span>
+          <span class="tag">Qwen3-8B</span>
+          <span class="tag">Llama-3.1-70B</span>
+          <span class="tag">Qwen3-32B</span>
+        </div>
+      </div>
+      <div>
+        <h4 style="color:var(--accent-2);margin-bottom:16px">Baselines</h4>
+        <div class="stack" style="gap:8px">
+          <p class="dim"><strong style="color:var(--text-1)">Chain-based:</strong> ReAct, Search-o1, Self-RAG, MemoRAG</p>
+          <p class="dim"><strong style="color:var(--text-1)">Tree-based:</strong> ConTReGen, RAG-Star, ProbTree</p>
+        </div>
+        <h4 style="color:var(--accent-2);margin-top:24px;margin-bottom:16px">PruneRAG Config</h4>
+        <div class="stack" style="gap:8px">
+          <p class="dim">• Max branching factor: 2</p>
+          <p class="dim">• Max tree depth: 3</p>
+          <p class="dim">• Confidence threshold τ<sub>A</sub>: 0.95</p>
+          <p class="dim">• Retriever: BGE-large-en-v1.5</p>
+          <p class="dim">• Top-k documents per query: 5</p>
+          <p class="dim">• Corpus: Wikipedia 2018 dump</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 15: Main Results -->
+  <section class="slide" data-title="Main Results">
+    <p class="kicker">experiments · main results (RQ1)</p>
+    <h2 class="h2">Main Results: Qwen3-8B</h2>
+    <table class="mt-m" style="font-size:14px">
+      <thead>
+        <tr><th>Method</th><th>Time(ms)</th><th colspan="3" style="text-align:center">HotpotQA</th><th colspan="3" style="text-align:center">2WikiQA</th><th colspan="3" style="text-align:center">MuSiQue</th></tr>
+        <tr><th></th><th></th><th>EM</th><th>F1</th><th>EFR↓</th><th>EM</th><th>F1</th><th>EFR↓</th><th>EM</th><th>F1</th><th>EFR↓</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>React</td><td>4,497</td><td>30.0</td><td>36.7</td><td class="worst">46.4</td><td>23.6</td><td>28.7</td><td class="worst">54.2</td><td>10.2</td><td>15.7</td><td class="worst">69.5</td></tr>
+        <tr><td>Search-o1</td><td>4,841</td><td>36.4</td><td>42.6</td><td>56.9</td><td>23.2</td><td>27.5</td><td>54.3</td><td>12.4</td><td>17.4</td><td>62.1</td></tr>
+        <tr><td>ConTReGen</td><td>4,507</td><td>47.6</td><td>55.4</td><td>30.5</td><td>29.0</td><td>33.9</td><td>27.8</td><td>11.8</td><td>17.2</td><td>60.0</td></tr>
+        <tr><td>RAG-Star</td><td>14,709</td><td>48.6</td><td>57.8</td><td>52.4</td><td>31.0</td><td>37.8</td><td>73.9</td><td>12.2</td><td>19.8</td><td>84.2</td></tr>
+        <tr><td>ProbTree</td><td>3,300</td><td>22.6</td><td>26.4</td><td>50.0</td><td>15.8</td><td>19.2</td><td>50.6</td><td>5.0</td><td>7.6</td><td>84.3</td></tr>
+        <tr style="background:rgba(126,231,135,.08)"><td><strong style="color:var(--accent)">PruneRAG</strong></td><td class="best">2,254</td><td class="best">56.6</td><td class="best">63.6</td><td class="best">23.1</td><td class="best">41.2</td><td class="best">44.4</td><td class="best">26.0</td><td class="best">17.6</td><td class="best">25.6</td><td class="best">38.4</td></tr>
+      </tbody>
+    </table>
+    <div class="row mt-m" style="justify-content:center;gap:32px">
+      <div style="text-align:center"><span class="stat" style="font-size:36px">+5.8</span><p class="stat-label">F1 improvement (HotpotQA)</p></div>
+      <div style="text-align:center"><span class="stat" style="font-size:36px">4.9×</span><p class="stat-label">faster than multi-retrieval avg</p></div>
+      <div style="text-align:center"><span class="stat" style="font-size:36px">-20.8%</span><p class="stat-label">EFR reduction avg</p></div>
+    </div>
+  </section>
+
+  <!-- Slide 16: Ablation Study -->
+  <section class="slide" data-title="Ablation">
+    <p class="kicker">experiments · ablation (RQ2)</p>
+    <h2 class="h2">Ablation Study</h2>
+    <table class="mt-l" style="font-size:15px">
+      <thead>
+        <tr><th>Method</th><th colspan="3" style="text-align:center">HotpotQA</th><th colspan="3" style="text-align:center">2WikiQA</th><th colspan="3" style="text-align:center">MuSiQue</th></tr>
+        <tr><th></th><th>EM</th><th>RN</th><th>EFR↓</th><th>EM</th><th>RN</th><th>EFR↓</th><th>EM</th><th>RN</th><th>EFR↓</th></tr>
+      </thead>
+      <tbody>
+        <tr style="background:rgba(126,231,135,.08)"><td class="best">PruneRAG (full)</td><td class="best">56.6</td><td>2.0</td><td class="best">23.1</td><td class="best">41.2</td><td>3.4</td><td class="best">26.0</td><td class="best">17.6</td><td>3.3</td><td class="best">38.4</td></tr>
+        <tr><td>w/o Confidence</td><td>53.4</td><td>1.9</td><td>25.1</td><td>39.6</td><td>3.3</td><td>26.2</td><td>16.2</td><td>3.2</td><td class="worst">51.2</td></tr>
+        <tr><td>w/o Answer</td><td>37.8</td><td>3.3</td><td class="worst">48.2</td><td>33.2</td><td>4.4</td><td class="worst">55.3</td><td>15.0</td><td>4.8</td><td class="worst">65.0</td></tr>
+        <tr><td>w/o Entity</td><td>53.4</td><td>1.7</td><td>24.4</td><td>40.0</td><td>2.8</td><td>27.8</td><td>15.4</td><td>3.1</td><td>53.3</td></tr>
+        <tr><td>w/o Adaptive</td><td>42.0</td><td>5.3</td><td class="worst">43.2</td><td>32.0</td><td>4.6</td><td class="worst">50.0</td><td>15.2</td><td>5.8</td><td class="worst">67.7</td></tr>
+      </tbody>
+    </table>
+    <div class="grid g2 mt-l">
+      <div class="highlight">
+        <p style="color:var(--text-1);font-size:14px"><strong>Confidence + Adaptive</strong> are the most critical — removing either causes EFR to spike dramatically, confirming they are key to mitigating evidence forgetting.</p>
+      </div>
+      <div class="highlight-blue">
+        <p style="color:var(--text-1);font-size:14px"><strong>w/o Answer</strong> increases retrieval calls (RN: 2.0→3.3) and EFR — preventing early termination destabilizes the entire reasoning process.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 17: Retrieval Efficiency (with Figure 3) -->
+  <section class="slide" data-title="Efficiency">
+    <p class="kicker">experiments · efficiency (RQ3)</p>
+    <h2 class="h2">Retrieval Efficiency Analysis</h2>
+    <div class="grid g2 mt-m" style="align-items:start">
+      <div>
+        <table style="font-size:14px">
+          <thead>
+            <tr><th>Method</th><th>RN</th><th>Recall</th><th>RE</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>React</td><td>2.61</td><td>47.5</td><td>13.2</td></tr>
+            <tr><td>Search-o1</td><td>3.09</td><td>54.3</td><td>12.3</td></tr>
+            <tr><td>Self-RAG</td><td>1.89</td><td>54.3</td><td class="best">16.7</td></tr>
+            <tr><td>ConTReGen</td><td>3.76</td><td>58.0</td><td>10.5</td></tr>
+            <tr><td>RAG-Star</td><td class="worst">6.73</td><td>42.9</td><td class="worst">5.4</td></tr>
+            <tr><td>ProbTree</td><td>4.00</td><td>61.7</td><td>10.2</td></tr>
+            <tr style="background:rgba(126,231,135,.08)"><td class="best">PruneRAG</td><td class="best">2.06</td><td>60.7</td><td class="best">16.7</td></tr>
+          </tbody>
+        </table>
+        <p class="dim mt-s" style="font-size:12px">RE = Recall / Retrieval Number</p>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center">
+        <img src="img/fig3-1.png" alt="Figure 3: Retrieval efficiency bubble chart" style="max-width:100%;max-height:360px;border-radius:var(--radius);border:1px solid var(--border)">
+        <p class="dim mt-s" style="font-size:12px">Bubble size = EM accuracy. PruneRAG: fewer calls, strong recall, best accuracy.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 18: Hyperparameter Analysis (with Figures 4 & 6) -->
+  <section class="slide" data-title="Hyperparameters">
+    <p class="kicker">experiments · hyperparameters (RQ4)</p>
+    <h2 class="h2">Hyperparameter Sensitivity</h2>
+    <div class="grid g2 mt-m" style="align-items:start">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center">
+        <img src="img/fig4-1.png" alt="Figure 4: Impact of max tree depth" style="max-width:100%;max-height:260px;border-radius:var(--radius);border:1px solid var(--border)">
+        <p class="dim mt-s" style="font-size:13px"><strong style="color:var(--text-1)">Max Tree Depth:</strong> Multi-hop optimal at depth 2–3; single-hop best at 1.</p>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center">
+        <img src="img/fig6-1.png" alt="Figure 6: Impact of confidence threshold" style="max-width:100%;max-height:260px;border-radius:var(--radius);border:1px solid var(--border)">
+        <p class="dim mt-s" style="font-size:13px"><strong style="color:var(--text-1)">Threshold τ<sub>A</sub>:</strong> Peak performance at [0.9, 0.95], stable across datasets.</p>
+      </div>
+    </div>
+    <div class="highlight mt-m" style="text-align:center">
+      <p style="font-size:14px;color:var(--text-1)">PruneRAG is robust to hyperparameters. Depth 2–3 + τ<sub>A</sub> = 0.95 forms a transferable configuration.</p>
+    </div>
+  </section>
+
+  <!-- Slide 19: Larger Models & Generalization -->
+  <section class="slide" data-title="Generalization">
+    <p class="kicker">experiments · generalization</p>
+    <h2 class="h2">Scaling & Generalization</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <h4 style="color:var(--accent-2);margin-bottom:16px">Larger Models (HotpotQA)</h4>
+        <table style="font-size:14px">
+          <thead>
+            <tr><th>Method</th><th colspan="2" style="text-align:center">Llama-70B</th><th colspan="2" style="text-align:center">Qwen3-32B</th></tr>
+            <tr><th></th><th>F1</th><th>EFR↓</th><th>F1</th><th>EFR↓</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>React</td><td>46.6</td><td>41.8</td><td>40.4</td><td>35.5</td></tr>
+            <tr><td>ConTReGen</td><td>57.7</td><td>30.7</td><td>58.7</td><td>36.4</td></tr>
+            <tr><td>RAG-Star</td><td>50.9</td><td class="worst">49.6</td><td>46.9</td><td class="worst">49.3</td></tr>
+            <tr style="background:rgba(126,231,135,.08)"><td class="best">PruneRAG</td><td class="best">66.0</td><td class="best">29.2</td><td class="best">66.0</td><td class="best">24.6</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h4 style="color:var(--accent-2);margin-bottom:16px">Key Findings</h4>
+        <div class="stack" style="gap:14px">
+          <div class="highlight">
+            <p style="font-size:14px;color:var(--text-1)"><strong>Scaling alone doesn't solve forgetting.</strong> Even 70B models show EFR > 40% with baseline methods.</p>
+          </div>
+          <div class="highlight-blue">
+            <p style="font-size:14px;color:var(--text-1)"><strong>Alternative retriever (E5):</strong> PruneRAG maintains superiority — forgetting is retriever-agnostic.</p>
+          </div>
+          <p class="dim" style="font-size:14px">Principled mechanisms (confidence pruning + adaptive expansion) remain necessary even with larger capacity.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 20: Conclusion -->
+  <section class="slide center" data-title="Conclusion">
+    <p class="kicker">conclusion</p>
+    <h2 class="h2">Takeaways</h2>
+    <div class="grid g3 mt-l" style="max-width:1100px;margin-left:auto;margin-right:auto">
+      <div class="card card-accent" style="text-align:center">
+        <div style="font-size:40px;margin-bottom:12px">🌳</div>
+        <h4>Structured Reasoning</h4>
+        <p class="dim mt-s">Query decomposition tree unifies answering, decomposition, and entity retrieval in one framework.</p>
+      </div>
+      <div class="card card-blue" style="text-align:center">
+        <div style="font-size:40px;margin-bottom:12px">🎯</div>
+        <h4>Evidence Preservation</h4>
+        <p class="dim mt-s">Confidence-guided pruning mitigates evidence forgetting — avg 20.8% EFR reduction.</p>
+      </div>
+      <div class="card card-purple" style="text-align:center">
+        <div style="font-size:40px;margin-bottom:12px">⚡</div>
+        <h4>Efficient Inference</h4>
+        <p class="dim mt-s">4.9× faster than multi-retrieval baselines with highest accuracy.</p>
+      </div>
+    </div>
+    <div class="mt-l" style="text-align:center">
+      <p class="lede">F1 improved by <strong style="color:var(--accent)">+5.45%</strong> on average over the strongest baselines across three multi-hop QA benchmarks.</p>
+      <div class="row mt-m" style="justify-content:center;gap:16px">
+        <span class="tag tag-green">Code: github.com/Fdioa/PruneRAG</span>
+        <span class="tag tag-blue">Project: fdioa.github.io/PruneRAG</span>
+        <span class="tag tag-blue">WWW '26 · Dubai</span>
+      </div>
+    </div>
+    <div class="project-qr mt-m">
+      <img src="img/project-page-qr.png" alt="QR code for PruneRAG project page">
+      <div>
+        <p class="mono" style="color:var(--accent);font-size:13px;font-weight:700">Project Page</p>
+        <p class="dim" style="font-size:14px">https://fdioa.github.io/PruneRAG/</p>
+      </div>
+    </div>
+    <div class="deck-footer"><span class="mono">Thank you! Questions?</span><span class="slide-number" data-current="20" data-total="20"></span></div>
+  </section>
+
+</div>
+<script src="assets/runtime.js"></script>
+</body></html>

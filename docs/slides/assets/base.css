@@ -1,0 +1,138 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #0d1117;
+}
+
+body {
+  font-family: Inter, "Noto Sans SC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+p,
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+}
+
+img {
+  display: block;
+}
+
+.deck {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #0d1117;
+}
+
+.slide {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(36px);
+  transition: opacity 180ms ease, transform 180ms ease, visibility 180ms ease;
+}
+
+.slide.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.slide-number::after {
+  content: attr(data-current) " / " attr(data-total);
+}
+
+.progress {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgba(139, 148, 158, 0.18);
+  z-index: 100;
+}
+
+.progress-bar {
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #7ee787, #79c0ff, #d2a8ff);
+  transition: width 180ms ease;
+}
+
+.present-button {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 120;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(230, 237, 243, 0.24);
+  border-radius: 999px;
+  background: rgba(13, 17, 23, 0.72);
+  color: #e6edf3;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  transition: opacity 160ms ease, transform 160ms ease, background 160ms ease;
+}
+
+.present-button:hover {
+  background: rgba(28, 34, 48, 0.9);
+  transform: translateY(-1px);
+}
+
+.present-button svg {
+  width: 21px;
+  height: 21px;
+}
+
+:fullscreen .present-button,
+:fullscreen .progress {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media print {
+  html,
+  body {
+    height: auto;
+    overflow: visible;
+  }
+
+  .deck {
+    width: auto;
+    height: auto;
+    overflow: visible;
+  }
+
+  .slide {
+    position: relative;
+    visibility: visible;
+    opacity: 1;
+    page-break-after: always;
+    transform: none;
+  }
+
+  .progress {
+    display: none;
+  }
+}
